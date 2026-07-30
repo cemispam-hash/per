@@ -10,6 +10,7 @@ from . import export as export_mod
 from . import pipeline
 from .egrul import SCHOOL_QUERIES
 from .http_client import HttpClient
+from .proxies import build_lanes, check_lanes, load_proxies
 from .regions import ALL_REGION_CODES
 from .store import Store
 
@@ -33,6 +34,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--db", default=DEFAULT_DB, help="файл базы SQLite")
     p.add_argument("--rate", type=float, default=0.7, help="запросов в секунду к источникам")
+    p.add_argument(
+        "--proxies",
+        default=None,
+        help="файл со списком прокси (по умолчанию data/proxies.txt, если он есть)",
+    )
+    p.add_argument(
+        "--no-direct",
+        action="store_true",
+        help="не использовать прямое соединение, только прокси",
+    )
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -116,11 +127,24 @@ def main(argv=None) -> int:
     store = Store(args.db)
     http = HttpClient(rate=args.rate)
 
+    # Каналы поднимаются только для сетевых этапов и только если прокси
+    # заданы: проверка каналов сама ходит в сеть, а todo/export к ней
+    # обращаться не должны.
+    lanes = None
+    if args.cmd in ("discover", "details", "run"):
+        proxy_list = load_proxies(args.proxies)
+        if proxy_list:
+            lanes = check_lanes(
+                build_lanes(args.rate, proxy_list, include_direct=not args.no_direct)
+            )
+
     if args.cmd == "discover":
-        n = pipeline.discover(store, http, args.regions, args.queries, args.max_pages)
+        n = pipeline.discover(
+            store, http, args.regions, args.queries, args.max_pages, lanes=lanes
+        )
         print(f"новых организаций: {n}")
     elif args.cmd == "details":
-        n = pipeline.fetch_details(store, http, args.limit, args.workers)
+        n = pipeline.fetch_details(store, http, args.limit, args.workers, lanes=lanes)
         print(f"разобрано выписок: {n}")
     elif args.cmd == "staff":
         n = pipeline.fetch_staff(store, http, args.zip_path)
@@ -137,8 +161,8 @@ def main(argv=None) -> int:
         if args.xlsx:
             print(f"XLSX:  {args.xlsx} — {export_mod.to_xlsx(store, args.xlsx, only)} строк")
     elif args.cmd == "run":
-        pipeline.discover(store, http, args.regions)
-        pipeline.fetch_details(store, http, workers=args.workers)
+        pipeline.discover(store, http, args.regions, lanes=lanes)
+        pipeline.fetch_details(store, http, workers=args.workers, lanes=lanes)
         pipeline.fetch_staff(store, http, args.zip_path)
         if not args.skip_contacts:
             pipeline.fetch_contacts(store, http, workers=args.workers)

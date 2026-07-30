@@ -38,14 +38,21 @@ def discover(
     regions: Optional[List[str]] = None,
     queries: Optional[List[str]] = None,
     max_pages: int = 250,
+    lanes: Optional[List] = None,
 ) -> int:
-    """Этап 1. Поиск школ в ЕГРЮЛ по регионам и вариантам наименования."""
-    client = EgrulClient(http)
+    """Этап 1. Поиск школ в ЕГРЮЛ по регионам и вариантам наименования.
+
+    С несколькими каналами регионы разбираются параллельно: лимит частоты
+    у ФНС считается по IP, поэтому каждый канал живёт своей жизнью.
+    """
     regions = regions or ALL_REGION_CODES
     queries = queries or SCHOOL_QUERIES
-    total_new = 0
+    clients = [EgrulClient(lane.client) for lane in lanes] if lanes else [EgrulClient(http)]
 
-    for reg in regions:
+    def one_region(idx_region) -> int:
+        idx, reg = idx_region
+        client = clients[idx % len(clients)]
+        new_here = 0
         for q in queries:
             key = f"discover:{reg}:{q}"
             if store.get_progress(key) == "done":
@@ -57,7 +64,7 @@ def discover(
                     batch.append(row)
                     found += 1
                     if len(batch) >= 200:
-                        total_new += store.add_orgs(batch)
+                        new_here += store.add_orgs(batch)
                         batch = []
             except CaptchaRequired as exc:
                 store.add_orgs(batch)
@@ -70,12 +77,22 @@ def discover(
                 log.warning("регион %s «%s»: %s", reg, q, exc)
                 continue
 
-            total_new += store.add_orgs(batch)
+            new_here += store.add_orgs(batch)
             store.set_progress(key, "done")
             log.info(
                 "регион %s (%s) «%s»: %s записей, всего в базе %s",
                 reg, region_name(reg), q, found, store.count("orgs"),
             )
+        return new_here
+
+    tasks = list(enumerate(regions))
+    if len(clients) == 1:
+        return sum(one_region(t) for t in tasks)
+
+    total_new = 0
+    with ThreadPoolExecutor(max_workers=len(clients)) as pool:
+        for got in pool.map(one_region, tasks):
+            total_new += got
     return total_new
 
 
@@ -93,20 +110,31 @@ def fetch_details(
     limit: Optional[int] = None,
     workers: int = 4,
     vyp_rate: float = 2.5,
+    lanes: Optional[List] = None,
 ) -> int:
     """Этап 2. Официальная выписка из ЕГРЮЛ: адрес, ОКВЭД, руководитель.
 
     Выписки качаются отдельным клиентом: строгий лимит частоты у ФНС
-    действует на поисковый POST, а не на загрузку выписки.
+    действует на поисковый POST, а не на загрузку выписки. При нескольких
+    каналах загрузка раскладывается по ним поровну.
     """
-    client = EgrulClient(http, vyp_http=HttpClient(rate=vyp_rate))
+    if lanes:
+        clients = [
+            EgrulClient(lane.client, vyp_http=HttpClient(rate=vyp_rate, proxy=lane.proxy))
+            for lane in lanes
+        ]
+        workers = max(workers, len(clients))
+    else:
+        clients = [EgrulClient(http, vyp_http=HttpClient(rate=vyp_rate))]
     pending = store.pending_details(limit)
     if not pending:
         return 0
-    log.info("выписок к загрузке: %s", len(pending))
+    log.info("выписок к загрузке: %s (каналов: %s)", len(pending), len(clients))
     done = 0
 
-    def work(row):
+    def work(indexed):
+        idx, row = indexed
+        client = clients[idx % len(clients)]
         inn, token = row["inn"], row["token"]
         pdf = client.vypiska_pdf(token, inn=inn)
         v = parse_pdf(pdf)
@@ -120,7 +148,9 @@ def fetch_details(
 
     maintenance = False
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(work, r): r["inn"] for r in pending}
+        futures = {
+            pool.submit(work, (i, r)): r["inn"] for i, r in enumerate(pending)
+        }
         for fut in as_completed(futures):
             inn = futures[fut]
             try:

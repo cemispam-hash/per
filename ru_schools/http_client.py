@@ -75,19 +75,29 @@ class HttpClient:
         retries: int = 5,
         user_agent: str = DEFAULT_UA,
         verify: Optional[str] = None,
+        proxy: Optional[str] = None,
     ):
-        """rate — запросов в секунду (на процесс)."""
+        """rate — запросов в секунду (на клиента).
+
+        `proxy` — адрес вида http://логин:пароль@хост:порт. Задан — весь
+        трафик клиента идёт через него, минуя настройки окружения.
+        """
         self.limiter = RateLimiter(1.0 / rate if rate > 0 else 0.0)
         self._lock = threading.Lock()
         self.timeout = timeout
         self.retries = retries
         self.session = requests.Session()
-        # Прокси песочницы принимает только CONNECT (HTTPS); переменная
-        # HTTP_PROXY заставила бы requests слать обычный HTTP-запрос → 405.
-        https_proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
-        if https_proxy:
+        self.proxy = proxy
+        if proxy:
             self.session.trust_env = False
-            self.session.proxies = {"https": https_proxy}
+            self.session.proxies = {"http": proxy, "https": proxy}
+        else:
+            # Прокси песочницы принимает только CONNECT (HTTPS); переменная
+            # HTTP_PROXY заставила бы requests слать обычный HTTP-запрос → 405.
+            https_proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+            if https_proxy:
+                self.session.trust_env = False
+                self.session.proxies = {"https": https_proxy}
         self.session.headers.update(
             {
                 "User-Agent": user_agent,

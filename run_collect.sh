@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Непрерывный сбор: поиск в ЕГРЮЛ → выписки → численность → выгрузка.
-# Скрипт возобновляемый: состояние в SQLite, можно останавливать и запускать снова.
+# Непрерывный сбор до полного завершения: поиск в ЕГРЮЛ → выписки →
+# численность → контакты → выгрузка. Скрипт возобновляемый: состояние
+# лежит в SQLite, поэтому его можно останавливать и запускать сколько угодно.
+#
+# Цикл крутится, пока не будет собрано всё: незавершённые запросы
+# повторяются, недоступность сервиса переживается паузой. Организации,
+# упавшие MAX_ATTEMPTS раз подряд, из очереди выбывают — иначе завершения
+# не дождаться.
 set -u
 
 cd "$(dirname "$0")"
@@ -9,65 +15,91 @@ RATE="${RATE:-0.7}"
 WORKERS="${WORKERS:-2}"
 LOG="${LOG:-data/collect.log}"
 SSHR="${SSHR:-data/raw/sshr2019.zip}"
+DONE_MARKER="${DONE_MARKER:-data/COLLECT_DONE}"
+IDLE_SLEEP="${IDLE_SLEEP:-600}"
 
-say() { echo "[$(date +%H:%M:%S)] $*" | tee -a "$LOG"; }
+say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+todo() { python3 -m ru_schools.cli --db "$DB" todo 2>/dev/null || echo "-1 -1 -1"; }
 
-# Этап 1: поиск. Несколько проходов — незавершённые запросы повторяются.
-for pass in 1 2 3 4 5; do
-    say "поиск в ЕГРЮЛ, проход $pass"
-    python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" discover >> "$LOG" 2>&1
-    left=$(python3 - "$DB" <<'PY'
-import sqlite3, sys
-from ru_schools.regions import ALL_REGION_CODES
-from ru_schools.egrul import SCHOOL_QUERIES
-c = sqlite3.connect(sys.argv[1])
-done = {r[0] for r in c.execute("SELECT key FROM progress WHERE value='done'")}
-print(sum(1 for reg in ALL_REGION_CODES for q in SCHOOL_QUERIES
-          if f"discover:{reg}:{q}" not in done))
+commit_data() {
+    git add -A data/schools.csv data/schools.jsonl data/state.sql.gz 2>/dev/null || return 0
+    git diff --cached --quiet 2>/dev/null && return 0
+    git -c user.email=noreply@anthropic.com -c user.name=Claude \
+        commit -q -m "Данные: $1" 2>/dev/null && say "зафиксировано в git — $1"
+}
+
+# Снимок базы, чтобы сбор можно было продолжить на чистой машине.
+# Файл тяжёлый, поэтому обновляется редко — раз в SNAPSHOT_EVERY выписок.
+SNAPSHOT_EVERY="${SNAPSHOT_EVERY:-20000}"
+snapshot_at=0
+snapshot() {
+    python3 - "$DB" <<'PY'
+import gzip, sqlite3, sys
+conn = sqlite3.connect(sys.argv[1])
+with gzip.open("data/state.sql.gz", "wt", encoding="utf-8") as fh:
+    for line in conn.iterdump():
+        fh.write(line + "\n")
 PY
-)
-    say "не завершено поисковых запросов: $left"
-    [ "$left" = "0" ] && break
-done
+    say "снимок состояния обновлён ($(du -h data/state.sql.gz | cut -f1))"
+}
 
-# Этап 2: выписки из ЕГРЮЛ — порциями, с выгрузкой после каждой порции.
-last_commit=0
-idle=0
+say "=== запуск сбора (rate=$RATE, workers=$WORKERS) ==="
+round=0
+
 while true; do
-    before=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
-    say "выписки: разобрано $before"
-    python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" details --limit 500 --workers "$WORKERS" >> "$LOG" 2>&1
-    after=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
-    python3 -u -m ru_schools.cli --db "$DB" export --csv data/schools.csv --jsonl data/schools.jsonl >> "$LOG" 2>&1
-    # Результат фиксируется в git пачками, чтобы не плодить коммиты.
-    if [ $((after - last_commit)) -ge 5000 ]; then
-        last_commit=$after
-        git add -A data/schools.csv data/schools.jsonl 2>/dev/null
-        git -c user.email=noreply@anthropic.com -c user.name=Claude \
-            commit -q -m "Данные: собрано выписок — $after" 2>/dev/null \
-            && say "зафиксировано в git: $after выписок"
+    round=$((round + 1))
+    read -r left_discover left_details left_contacts <<< "$(todo)"
+    say "круг $round: осталось поиск=$left_discover выписок=$left_details контактов=$left_contacts"
+
+    if [ "$left_discover" = "0" ] && [ "$left_details" = "0" ] && [ "$left_contacts" = "0" ]; then
+        say "=== собрано всё ==="
+        python3 -u -m ru_schools.cli --db "$DB" staff --zip "$SSHR" >> "$LOG" 2>&1
+        python3 -u -m ru_schools.cli --db "$DB" export \
+            --csv data/schools.csv --jsonl data/schools.jsonl >> "$LOG" 2>&1
+        snapshot
+        commit_data "сбор завершён"
+        python3 -m ru_schools.cli --db "$DB" stats | tee -a "$LOG"
+        date > "$DONE_MARKER"
+        break
     fi
-    if [ "$after" = "$before" ]; then
-        idle=$((idle + 1))
-        # Ночью ЕГРЮЛ закрывает выдачу выписок на технологические работы —
-        # ждём и пробуем снова, а не завершаем этап.
-        if [ "$idle" -ge 6 ]; then
-            say "новых выписок нет после $idle попыток — этап завершён"
-            break
+
+    progressed=0
+
+    # Этап 1: перечень школ.
+    if [ "$left_discover" != "0" ]; then
+        say "поиск в ЕГРЮЛ ($left_discover запросов осталось)"
+        python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" discover >> "$LOG" 2>&1
+        read -r now_discover _ _ <<< "$(todo)"
+        [ "$now_discover" != "$left_discover" ] && progressed=1
+    fi
+
+    # Этап 2: выписки из ЕГРЮЛ.
+    if [ "$left_details" != "0" ]; then
+        before=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
+        python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" \
+            details --limit 2000 --workers "$WORKERS" >> "$LOG" 2>&1
+        after=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
+        say "выписок разобрано: $after (+$((after - before)))"
+        [ "$after" != "$before" ] && progressed=1
+        python3 -u -m ru_schools.cli --db "$DB" export \
+            --csv data/schools.csv --jsonl data/schools.jsonl >> "$LOG" 2>&1
+        if [ $((after - snapshot_at)) -ge "$SNAPSHOT_EVERY" ]; then
+            snapshot_at=$after
+            snapshot
         fi
-        say "выписки недоступны, пауза 10 минут (попытка $idle из 6)"
-        sleep 600
-    else
-        idle=0
+        commit_data "собрано выписок — $after"
+    fi
+
+    # Этап 3: контакты — только когда перечень и выписки закончены,
+    # чтобы не мешать запросам к ЕГРЮЛ.
+    if [ "$left_discover" = "0" ] && [ "$left_details" = "0" ] && [ "$left_contacts" != "0" ]; then
+        python3 -u -m ru_schools.cli --db "$DB" --rate 1.5 \
+            contacts --limit 2000 --workers "$WORKERS" >> "$LOG" 2>&1
+        progressed=1
+    fi
+
+    if [ "$progressed" = "0" ]; then
+        say "сервис недоступен или лимит частоты — пауза ${IDLE_SLEEP}с"
+        sleep "$IDLE_SLEEP"
     fi
 done
-
-# Этап 3: численность работников из открытых данных ФНС.
-if [ -f "$SSHR" ]; then
-    say "сопоставление численности"
-    python3 -u -m ru_schools.cli --db "$DB" staff --zip "$SSHR" >> "$LOG" 2>&1
-fi
-
-python3 -u -m ru_schools.cli --db "$DB" export --csv data/schools.csv --jsonl data/schools.jsonl >> "$LOG" 2>&1
-say "готово"
-python3 -m ru_schools.cli --db "$DB" stats | tee -a "$LOG"

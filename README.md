@@ -55,6 +55,29 @@ python3 -m ru_schools.cli export --csv data/schools.csv --xlsx data/schools.xlsx
 python3 -m ru_schools.cli run
 ```
 
+### Сбор до победного
+
+`watchdog.sh` держит сбор запущенным, пока не будет собрано всё: гоняет
+`run_collect.sh` по кругу, переживает недоступность сервиса и падения,
+поднимает процесс заново и останавливается только когда появляется
+`data/COLLECT_DONE`.
+
+```bash
+setsid nohup ./watchdog.sh > data/watchdog.log 2>&1 < /dev/null &
+
+python3 -m ru_schools.cli todo   # осталось: поиск, выписки, контакты
+tail -f data/collect.log
+```
+
+По ходу дела скрипт выгружает CSV/JSONL и коммитит их, а раз в 20 000
+выписок сохраняет сжатый снимок базы `data/state.sql.gz`. На чистой машине
+сбор продолжается с этого места:
+
+```bash
+python3 -m ru_schools.cli restore   # база из снимка
+setsid nohup ./watchdog.sh > data/watchdog.log 2>&1 < /dev/null &
+```
+
 Состояние хранится в SQLite (`data/schools.db`), поэтому любой этап можно
 прервать и запустить заново — работа продолжится с места остановки.
 Скорость регулируется флагом `--rate` (запросов в секунду).

@@ -67,12 +67,44 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("stats", help="статистика по базе")
     sub.add_parser("regions", help="список кодов регионов")
+    sub.add_parser("todo", help="сколько работы осталось: поиск, выписки, контакты")
+
+    r = sub.add_parser("restore", help="восстановить базу из снимка data/state.sql.gz")
+    r.add_argument("--snapshot", default="data/state.sql.gz")
     return p
+
+
+def _todo(store: Store) -> tuple:
+    """(незавершённых поисковых запросов, выписок, контактов)."""
+    done = {
+        r[0]
+        for r in store.conn.execute("SELECT key FROM progress WHERE value='done'")
+    }
+    left_discover = sum(
+        1
+        for reg in ALL_REGION_CODES
+        for q in SCHOOL_QUERIES
+        if f"discover:{reg}:{q}" not in done
+    )
+    rest = store.remaining()
+    return left_discover, rest["details"], rest["contacts"]
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     _logging(args.verbose)
+
+    if args.cmd == "restore":
+        import gzip
+        import sqlite3
+
+        conn = sqlite3.connect(args.db)
+        with gzip.open(args.snapshot, "rt", encoding="utf-8") as fh:
+            conn.executescript(fh.read())
+        conn.commit()
+        conn.close()
+        print(f"база {args.db} восстановлена из {args.snapshot}")
+        return 0
 
     if args.cmd == "regions":
         from .regions import region_name
@@ -115,6 +147,11 @@ def main(argv=None) -> int:
     elif args.cmd == "stats":
         for k, v in store.stats().items():
             print(f"{k:22}: {v}")
+    elif args.cmd == "todo":
+        # Формат разбирается скриптом сбора, менять с осторожностью.
+        print("%d %d %d" % _todo(store))
+        store.close()
+        return 0
 
     if args.cmd not in ("stats", "regions"):
         print("--- итог ---")

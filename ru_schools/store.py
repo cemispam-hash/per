@@ -184,22 +184,42 @@ class Store:
             sql += " WHERE " + where
         return self.conn.execute(sql).fetchone()["c"]
 
+    # Организация, упавшая столько раз подряд, больше не запрашивается —
+    # иначе цикл сбора никогда не завершится.
+    MAX_ATTEMPTS = 5
+
     def pending_details(self, limit: Optional[int] = None) -> List[sqlite3.Row]:
         sql = """SELECT o.inn, o.token, o.region_code, o.region_name
-                 FROM orgs o LEFT JOIN details d ON d.inn = o.inn
-                 WHERE d.inn IS NULL AND (o.terminated_date IS NULL OR o.terminated_date = '')
+                 FROM orgs o
+                 LEFT JOIN details d ON d.inn = o.inn
+                 LEFT JOIN (SELECT inn, COUNT(*) n FROM failures
+                            WHERE stage = 'details' GROUP BY inn) f ON f.inn = o.inn
+                 WHERE d.inn IS NULL
+                   AND (o.terminated_date IS NULL OR o.terminated_date = '')
+                   AND COALESCE(f.n, 0) < ?
                  ORDER BY o.region_code, o.inn"""
         if limit:
             sql += f" LIMIT {int(limit)}"
-        return self.conn.execute(sql).fetchall()
+        return self.conn.execute(sql, (self.MAX_ATTEMPTS,)).fetchall()
 
     def pending_contacts(self, limit: Optional[int] = None) -> List[sqlite3.Row]:
         sql = """SELECT d.inn, d.kpp, d.name_short, d.city, d.region
-                 FROM details d LEFT JOIN contacts c ON c.inn = d.inn
-                 WHERE c.inn IS NULL AND d.is_school = 1"""
+                 FROM details d
+                 LEFT JOIN contacts c ON c.inn = d.inn
+                 LEFT JOIN (SELECT inn, COUNT(*) n FROM failures
+                            WHERE stage = 'contacts' GROUP BY inn) f ON f.inn = d.inn
+                 WHERE c.inn IS NULL AND d.is_school = 1
+                   AND COALESCE(f.n, 0) < ?"""
         if limit:
             sql += f" LIMIT {int(limit)}"
-        return self.conn.execute(sql).fetchall()
+        return self.conn.execute(sql, (self.MAX_ATTEMPTS,)).fetchall()
+
+    def remaining(self) -> Dict[str, int]:
+        """Сколько работы осталось на каждом этапе."""
+        return {
+            "details": len(self.pending_details()),
+            "contacts": len(self.pending_contacts()),
+        }
 
     def export_rows(self, schools_only: bool = True) -> List[sqlite3.Row]:
         sql = """

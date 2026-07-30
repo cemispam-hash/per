@@ -4,3 +4,5 @@ data/raw/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/*.log
+data/COLLECT_DONE

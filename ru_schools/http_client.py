@@ -31,15 +31,17 @@ _CA_BUNDLE = "/root/.ccr/ca-bundle.crt"
 class RateLimiter:
     """Адаптивный троттлинг: один запрос раз в `interval` секунд на процесс.
 
-    ЕГРЮЛ отвечает 405 при превышении лимита и держит паузу несколько минут,
-    поэтому интервал растёт при отказах и медленно возвращается к базовому
-    после серии удачных запросов.
+    ЕГРЮЛ отвечает 405 при превышении лимита, поэтому интервал растёт при
+    отказах. Расти ему есть куда, но недалеко: слишком осторожный лимитер
+    сам становится узким местом и способен застопорить сбор на часы, уже
+    после того как сервис давно отвечает нормально. Поэтому потолок низкий,
+    а возврат к базовой скорости — быстрый.
     """
 
-    def __init__(self, interval: float, max_interval: float = 120.0):
+    def __init__(self, interval: float, max_interval: float = 20.0):
         self.base = interval
         self.interval = interval
-        self.max_interval = max_interval
+        self.max_interval = max(max_interval, interval)
         self._lock = threading.Lock()
         self._next_at = 0.0
         self._ok_streak = 0
@@ -56,8 +58,9 @@ class RateLimiter:
         with self._lock:
             self.interval = min(max(self.interval * factor, 2.0), self.max_interval)
             self._ok_streak = 0
+            return self.interval
 
-    def relax(self, every: int = 25, factor: float = 0.8) -> None:
+    def relax(self, every: int = 5, factor: float = 0.5) -> None:
         with self._lock:
             if self.interval <= self.base:
                 return
@@ -136,8 +139,15 @@ class HttpClient:
                 # поэтому ждём дольше обычного.
                 slow = resp.status_code in (403, 405, 429)
                 if slow:
-                    self.limiter.penalize()
+                    interval = self.limiter.penalize()
                     self.reset_session()
+                    # Раньше это писалось в DEBUG, и сбор незаметно уползал
+                    # в многоминутные паузы — теперь торможение видно в логе.
+                    log.info(
+                        "источник ограничил частоту (HTTP %s), интервал между "
+                        "запросами теперь %.1f с",
+                        resp.status_code, interval,
+                    )
                 self._backoff(attempt, f"HTTP {resp.status_code} {url}", slow=slow)
                 continue
             self.limiter.relax()
@@ -153,8 +163,9 @@ class HttpClient:
 
     @staticmethod
     def _backoff(attempt: int, why: str, slow: bool = False) -> None:
-        # Блокировка по частоте у ЕГРЮЛ держится минутами — ждём долго.
-        base = 60 * (attempt + 1) if slow else 2 ** attempt
-        delay = min(base, 300) + random.uniform(0, 5)
+        # Пауза после отказа по частоте должна быть заметной, но не такой,
+        # чтобы один запрос съедал четверть часа.
+        base = 20 * (attempt + 1) if slow else 2 ** attempt
+        delay = min(base, 90) + random.uniform(0, 5)
         log.debug("повтор через %.1f с (%s)", delay, why)
         time.sleep(delay)

@@ -5,6 +5,8 @@ return [
     'phone' => '8 (800) 550-44-70',
     'phone_href' => '+78005504470',
     'email' => 'info@perevozavto.example',
+    'whatsapp' => 'https://wa.me/78005504470',
+    'telegram' => 'https://t.me/perevozavto',
     'address' => 'Москва, Варшавское шоссе, 42, офис 314',
     'company' => 'ООО «ПеревозАвто», ИНН 7700000000',
     'work_hours' => 'Ежедневно с 8:00 до 22:00 (МСК)',

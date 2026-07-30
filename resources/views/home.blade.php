@@ -36,13 +36,13 @@
           </ul>
         </div>
 
-        @include('partials.calc', ['cities' => $cities])
+        @include('partials.calc')
       </div>
 
       <div class="hero__stats">
-        <div><b class="num">12 лет</b><span>перевозим автомобили</span></div>
-        <div><b class="num">18 640</b><span>машин доставлено</span></div>
-        <div><b class="num">120+</b><span>городов России</span></div>
+        <div><b class="num" data-count="12" data-suffix=" лет">12 лет</b><span>перевозим автомобили</span></div>
+        <div><b class="num" data-count="18640">18 640</b><span>машин доставлено</span></div>
+        <div><b class="num" data-count="120" data-suffix="+">120+</b><span>городов России</span></div>
         <div><b class="num">4,9 из 5</b><span>рейтинг на Яндексе</span></div>
       </div>
     </div>
@@ -237,19 +237,19 @@
           <span class="review__route">Москва → Владивосток</span>
           <div class="review__stars" aria-label="Оценка 5 из 5">★★★★★</div>
           <p>Отправлял новый Geely дилеру во Владивосток. Переживал из-за расстояния, но машина пришла на 12-й день ровно в том виде, в каком грузили, — сверяли по фото из акта. Трекинг работал всю дорогу.</p>
-          <div class="review__who"><b>Андрей К.</b> · февраль 2026</div>
+          <div class="review__who"><span class="review__avatar" aria-hidden="true">АК</span><span><b>Андрей К.</b> · февраль 2026</span></div>
         </article>
         <article class="card review">
           <span class="review__route">Краснодар → Санкт-Петербург</span>
           <div class="review__stars" aria-label="Оценка 5 из 5">★★★★★</div>
           <p>Переезжали всей семьёй, машину гнать самим было некогда. Забрали прямо от дома, привезли за 3 дня. Оплатила после осмотра — это решающий момент, почему выбрала эту компанию.</p>
-          <div class="review__who"><b>Марина В.</b> · май 2026</div>
+          <div class="review__who"><span class="review__avatar" aria-hidden="true">МВ</span><span><b>Марина В.</b> · май 2026</span></div>
         </article>
         <article class="card review">
           <span class="review__route">Владивосток → Москва</span>
           <div class="review__stars" aria-label="Оценка 5 из 5">★★★★★</div>
           <p>Покупал праворульный Land Cruiser с аукциона. Логист сам связался с продавцом, принял машину по доверенности и держал меня в курсе на каждом этапе. Сервис уровня «отдал и забыл».</p>
-          <div class="review__who"><b>Дмитрий С.</b> · июнь 2026</div>
+          <div class="review__who"><span class="review__avatar" aria-hidden="true">ДС</span><span><b>Дмитрий С.</b> · июнь 2026</span></div>
         </article>
       </div>
     </div>
@@ -286,6 +286,16 @@
       <div>
         <h2 class="h2">Узнайте точную стоимость за 15 минут</h2>
         <p>Оставьте телефон — логист рассчитает маршрут и назовёт ближайшую дату загрузки.</p>
+        <div class="messengers">
+          <a class="messenger messenger--wa" href="{{ config('landing.whatsapp') }}" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.4 14.1c-.2.7-1.3 1.3-1.9 1.4-.5.1-1.1.1-1.8-.1-.4-.1-.9-.3-1.6-.6-2.9-1.2-4.7-4.1-4.9-4.3-.1-.2-1.1-1.5-1.1-2.9 0-1.4.7-2 1-2.3.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.4.2.5.7 1.8.8 1.9.1.1.1.3 0 .5l-.4.6c-.1.2-.3.3-.1.6.1.3.6 1 1.4 1.7.9.8 1.7 1.1 2 1.2.3.1.4.1.6-.1l.8-.9c.2-.2.3-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.2.1.7-.1 1.1z"/></svg>
+            WhatsApp
+          </a>
+          <a class="messenger messenger--tg" href="{{ config('landing.telegram') }}" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.6 18.9 19c-.2 1-.8 1.2-1.6.8l-4.6-3.4-2.2 2.1c-.2.2-.4.4-.9.4l.3-4.6L18.3 6.7c.4-.3-.1-.5-.6-.2L7.5 12.9l-4.4-1.4c-1-.3-1-1 .2-1.4L20.6 3.2c.8-.3 1.5.2 1.3 1.4z"/></svg>
+            Telegram
+          </a>
+        </div>
       </div>
       <form class="cta-band__form" data-lead-form action="{{ route('leads.store') }}" method="post">
         @csrf

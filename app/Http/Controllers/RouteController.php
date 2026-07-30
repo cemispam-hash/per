@@ -27,6 +27,7 @@ class RouteController extends Controller
 
         return view('route', [
             'route' => $route,
+            'calc' => TransportRoute::calcPayload(),
             'footerRoutes' => $related,
             'footerRoutesTitle' => 'Другие направления из ' . ($route->city_from_gen ?: $route->city_from),
         ]);

@@ -13,14 +13,9 @@ class HomeController extends Controller
             ->orderBy('price_sedan')
             ->get();
 
-        $cities = TransportRoute::query()
-            ->select('city_from')->union(TransportRoute::select('city_to'))
-            ->pluck('city_from')
-            ->unique()->sort()->values();
-
         return view('home', [
             'popular' => $popular,
-            'cities' => $cities,
+            'calc' => TransportRoute::calcPayload(),
             'footerRoutes' => TransportRoute::orderByDesc('is_popular')->orderBy('city_from')->limit(16)->get(),
         ]);
     }

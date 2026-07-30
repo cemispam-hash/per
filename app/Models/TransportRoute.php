@@ -27,6 +27,33 @@ class TransportRoute extends Model
         return $this->city_from . ' — ' . $this->city_to;
     }
 
+    /**
+     * Данные для интерактивного калькулятора на фронте:
+     * список городов и компактный JSON всех маршрутов.
+     *
+     * @return array{cities: \Illuminate\Support\Collection, json: string}
+     */
+    public static function calcPayload(): array
+    {
+        $routes = static::query()->get(['slug', 'city_from', 'city_to', 'distance_km', 'days_min', 'days_max', 'price_sedan']);
+
+        $cities = $routes->pluck('city_from')
+            ->merge($routes->pluck('city_to'))
+            ->unique()->sort()->values();
+
+        $json = $routes->map(fn ($r) => [
+            'slug' => $r->slug,
+            'f' => $r->city_from,
+            't' => $r->city_to,
+            'km' => $r->distance_km,
+            'd1' => $r->days_min,
+            'd2' => $r->days_max,
+            'p' => $r->price_sedan,
+        ])->toJson(JSON_UNESCAPED_UNICODE);
+
+        return ['cities' => $cities, 'json' => $json];
+    }
+
     /** «из Москвы» — city_from_gen хранит родительный падеж */
     public function getFromPhraseAttribute(): string
     {

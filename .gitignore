@@ -28,4 +28,4 @@ Thumbs.db
 
 bot/.venv/
 bot/*.sqlite3*
-bot/__pycache__/
+__pycache__/

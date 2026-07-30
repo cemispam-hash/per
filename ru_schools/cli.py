@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Сбор открытых сведений о школах России (ЕГРЮЛ ФНС и другие открытые данные)",
     )
     p.add_argument("--db", default=DEFAULT_DB, help="файл базы SQLite")
-    p.add_argument("--rate", type=float, default=1.5, help="запросов в секунду к источникам")
+    p.add_argument("--rate", type=float, default=0.7, help="запросов в секунду к источникам")
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
 

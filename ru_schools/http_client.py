@@ -29,23 +29,42 @@ _CA_BUNDLE = "/root/.ccr/ca-bundle.crt"
 
 
 class RateLimiter:
-    """Не более одного запроса раз в `interval` секунд на весь процесс."""
+    """Адаптивный троттлинг: один запрос раз в `interval` секунд на процесс.
 
-    def __init__(self, interval: float):
+    ЕГРЮЛ отвечает 405 при превышении лимита и держит паузу несколько минут,
+    поэтому интервал растёт при отказах и медленно возвращается к базовому
+    после серии удачных запросов.
+    """
+
+    def __init__(self, interval: float, max_interval: float = 120.0):
+        self.base = interval
         self.interval = interval
+        self.max_interval = max_interval
         self._lock = threading.Lock()
         self._next_at = 0.0
+        self._ok_streak = 0
 
     def wait(self) -> None:
         with self._lock:
             now = time.monotonic()
-            if now < self._next_at:
-                delay = self._next_at - now
-            else:
-                delay = 0.0
+            delay = max(0.0, self._next_at - now)
             self._next_at = max(now, self._next_at) + self.interval
         if delay > 0:
             time.sleep(delay)
+
+    def penalize(self, factor: float = 2.0) -> None:
+        with self._lock:
+            self.interval = min(max(self.interval * factor, 2.0), self.max_interval)
+            self._ok_streak = 0
+
+    def relax(self, every: int = 25, factor: float = 0.8) -> None:
+        with self._lock:
+            if self.interval <= self.base:
+                return
+            self._ok_streak += 1
+            if self._ok_streak >= every:
+                self._ok_streak = 0
+                self.interval = max(self.base, self.interval * factor)
 
 
 class HttpClient:
@@ -59,6 +78,7 @@ class HttpClient:
     ):
         """rate — запросов в секунду (на процесс)."""
         self.limiter = RateLimiter(1.0 / rate if rate > 0 else 0.0)
+        self._lock = threading.Lock()
         self.timeout = timeout
         self.retries = retries
         self.session = requests.Session()
@@ -77,6 +97,15 @@ class HttpClient:
         if verify is None and os.path.exists(_CA_BUNDLE):
             verify = _CA_BUNDLE
         self.verify = verify if verify else True
+        # Вызывается, когда сервис начал троттлить и сессия сброшена.
+        self.on_throttle = None
+
+    def reset_session(self) -> None:
+        """Сбрасывает cookie: ЕГРЮЛ ограничивает число запросов на сессию."""
+        with self._lock:
+            self.session.cookies.clear()
+        if self.on_throttle:
+            self.on_throttle()
 
     def request(self, method: str, url: str, **kw) -> requests.Response:
         last_exc = None
@@ -96,8 +125,12 @@ class HttpClient:
                 # 403/405/429 у ЕГРЮЛ означают троттлинг, а не ошибку запроса,
                 # поэтому ждём дольше обычного.
                 slow = resp.status_code in (403, 405, 429)
+                if slow:
+                    self.limiter.penalize()
+                    self.reset_session()
                 self._backoff(attempt, f"HTTP {resp.status_code} {url}", slow=slow)
                 continue
+            self.limiter.relax()
             return resp
 
         raise RuntimeError(f"не удалось выполнить запрос {url}: {last_exc}")
@@ -110,7 +143,8 @@ class HttpClient:
 
     @staticmethod
     def _backoff(attempt: int, why: str, slow: bool = False) -> None:
-        base = 5 * (attempt + 1) if slow else 2 ** attempt
-        delay = min(base, 60) + random.uniform(0, 1.5)
+        # Блокировка по частоте у ЕГРЮЛ держится минутами — ждём долго.
+        base = 60 * (attempt + 1) if slow else 2 ** attempt
+        delay = min(base, 300) + random.uniform(0, 5)
         log.debug("повтор через %.1f с (%s)", delay, why)
         time.sleep(delay)

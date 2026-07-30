@@ -101,12 +101,17 @@ class EgrulClient:
     def __init__(self, http: HttpClient):
         self.http = http
         self._primed = False
+        # После сброса сессии клиентом нужно заново получить cookie.
+        http.on_throttle = self._invalidate
+
+    def _invalidate(self) -> None:
+        self._primed = False
 
     def _prime(self) -> None:
         """Получить сессионные cookie перед первым запросом."""
         if not self._primed:
-            self.http.get(f"{BASE}/index.html", allow_redirects=True)
             self._primed = True
+            self.http.get(f"{BASE}/index.html", allow_redirects=True)
 
     def search_page(self, query: str, region: str = "", page: int = 1) -> List[EgrulRow]:
         """Одна страница результатов поиска (до 20 записей)."""

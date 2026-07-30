@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterable, List, Optional
@@ -18,6 +19,24 @@ from .store import Store
 from .vypiska import parse_pdf
 
 log = logging.getLogger(__name__)
+
+
+class Budget:
+    """Счётчик оставшихся запросов на заход; None — без ограничения."""
+
+    def __init__(self, limit: Optional[int]):
+        self.left = limit
+        self._lock = threading.Lock()
+
+    def take(self) -> bool:
+        if self.left is None:
+            return True
+        with self._lock:
+            if self.left <= 0:
+                return False
+            self.left -= 1
+            return True
+
 
 # Названия, по которым организация относится к общеобразовательным.
 SCHOOL_NAME_RE = re.compile(
@@ -39,12 +58,17 @@ def discover(
     queries: Optional[List[str]] = None,
     max_pages: int = 250,
     lanes: Optional[List] = None,
+    max_queries: Optional[int] = None,
 ) -> int:
     """Этап 1. Поиск школ в ЕГРЮЛ по регионам и вариантам наименования.
 
     С несколькими каналами регионы разбираются параллельно: лимит частоты
     у ФНС считается по IP, поэтому каждый канал живёт своей жизнью.
+
+    `max_queries` ограничивает объём одного захода, чтобы управление
+    возвращалось наверх и следующие этапы тоже получали своё время.
     """
+    budget = Budget(max_queries)
     regions = regions or ALL_REGION_CODES
     queries = queries or SCHOOL_QUERIES
     clients = [EgrulClient(lane.client) for lane in lanes] if lanes else [EgrulClient(http)]
@@ -57,6 +81,8 @@ def discover(
             key = f"discover:{reg}:{q}"
             if store.get_progress(key) == "done":
                 continue
+            if not budget.take():
+                break
             batch, found = [], 0
             try:
                 for row in client.search(q, region=reg, max_pages=max_pages):

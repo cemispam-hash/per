@@ -51,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--regions", nargs="*", default=None, help="коды регионов (по умолчанию все)")
     d.add_argument("--queries", nargs="*", default=None, help="поисковые запросы")
     d.add_argument("--max-pages", type=int, default=250)
+    d.add_argument(
+        "--max-queries",
+        type=int,
+        default=None,
+        help="ограничить число поисковых запросов за один заход",
+    )
 
     det = sub.add_parser("details", help="этап 2: выписки из ЕГРЮЛ (адрес, ОКВЭД, директор)")
     det.add_argument("--limit", type=int, default=None)
@@ -140,7 +146,8 @@ def main(argv=None) -> int:
 
     if args.cmd == "discover":
         n = pipeline.discover(
-            store, http, args.regions, args.queries, args.max_pages, lanes=lanes
+            store, http, args.regions, args.queries, args.max_pages,
+            lanes=lanes, max_queries=args.max_queries,
         )
         print(f"новых организаций: {n}")
     elif args.cmd == "details":

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -119,18 +120,26 @@ def check_lanes(
     Проверка идёт мимо повторов клиента: мёртвый прокси должен отсеиваться
     за секунды, а не за минуту ожиданий с экспоненциальной паузой.
     """
-    alive = []
-    for lane in lanes:
+    def probe(lane: Lane):
         try:
             resp = lane.client.session.get(
                 url, timeout=timeout, verify=lane.client.verify, allow_redirects=True
             )
             if resp.status_code < 500:
-                alive.append(lane)
-                continue
-            log.warning("канал %s отвечает %s — исключён", lane.name, resp.status_code)
+                return lane, None
+            return lane, f"отвечает {resp.status_code}"
         except Exception as exc:
-            log.warning("канал %s недоступен (%s) — исключён", lane.name, type(exc).__name__)
+            return lane, f"недоступен ({type(exc).__name__})"
+
+    alive = []
+    # Каналы проверяются разом: иначе мёртвые прокси складывают свои
+    # таймауты и старт каждого этапа растягивается на минуту.
+    with ThreadPoolExecutor(max_workers=max(1, len(lanes))) as pool:
+        for lane, problem in pool.map(probe, lanes):
+            if problem is None:
+                alive.append(lane)
+            else:
+                log.warning("канал %s %s — исключён", lane.name, problem)
     if not alive:
         raise RuntimeError("ни один канал не отвечает — проверьте прокси и сеть")
     log.info("рабочих каналов: %s из %s", len(alive), len(lanes))

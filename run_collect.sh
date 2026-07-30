@@ -17,21 +17,29 @@ LOG="${LOG:-data/collect.log}"
 SSHR="${SSHR:-data/raw/sshr2019.zip}"
 DONE_MARKER="${DONE_MARKER:-data/COLLECT_DONE}"
 IDLE_SLEEP="${IDLE_SLEEP:-600}"
+DISCOVER_CHUNK="${DISCOVER_CHUNK:-40}"
 
 say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 todo() { python3 -m ru_schools.cli --db "$DB" todo 2>/dev/null || echo "-1 -1 -1"; }
 
+# Выгрузка результата во все форматы; Excel — основной для заказчика.
+export_all() {
+    python3 -u -m ru_schools.cli --db "$DB" export \
+        --csv data/schools.csv --jsonl data/schools.jsonl \
+        --xlsx data/schools.xlsx >> "$LOG" 2>&1
+}
+
 commit_data() {
-    git add -A data/schools.csv data/schools.jsonl data/state.sql.gz 2>/dev/null || return 0
+    git add -A data/schools.csv data/schools.jsonl data/schools.xlsx data/state.sql.gz 2>/dev/null || return 0
     git diff --cached --quiet 2>/dev/null && return 0
     git -c user.email=noreply@anthropic.com -c user.name=Claude \
         commit -q -m "Данные: $1" 2>/dev/null && say "зафиксировано в git — $1"
 }
 
 # Снимок базы, чтобы сбор можно было продолжить на чистой машине.
-# Файл тяжёлый, поэтому обновляется редко — раз в SNAPSHOT_EVERY выписок.
-SNAPSHOT_EVERY="${SNAPSHOT_EVERY:-20000}"
-snapshot_at=0
+# Файл тяжёлый, поэтому обновляется редко — раз в COMMIT_EVERY выписок.
+COMMIT_EVERY="${COMMIT_EVERY:-10000}"
+last_commit=0
 snapshot() {
     python3 - "$DB" <<'PY'
 import gzip, sqlite3, sys
@@ -54,8 +62,7 @@ while true; do
     if [ "$left_discover" = "0" ] && [ "$left_details" = "0" ] && [ "$left_contacts" = "0" ]; then
         say "=== собрано всё ==="
         python3 -u -m ru_schools.cli --db "$DB" staff --zip "$SSHR" >> "$LOG" 2>&1
-        python3 -u -m ru_schools.cli --db "$DB" export \
-            --csv data/schools.csv --jsonl data/schools.jsonl >> "$LOG" 2>&1
+        export_all
         snapshot
         commit_data "сбор завершён"
         python3 -m ru_schools.cli --db "$DB" stats | tee -a "$LOG"
@@ -68,7 +75,10 @@ while true; do
     # Этап 1: перечень школ.
     if [ "$left_discover" != "0" ]; then
         say "поиск в ЕГРЮЛ ($left_discover запросов осталось)"
-        python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" discover >> "$LOG" 2>&1
+        # Заход ограничен, чтобы выписки не ждали конца всего поиска
+        # и таблица начала наполняться раньше.
+        python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" \
+            discover --max-queries "$DISCOVER_CHUNK" >> "$LOG" 2>&1
         read -r now_discover _ _ <<< "$(todo)"
         [ "$now_discover" != "$left_discover" ] && progressed=1
     fi
@@ -81,13 +91,13 @@ while true; do
         after=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
         say "выписок разобрано: $after (+$((after - before)))"
         [ "$after" != "$before" ] && progressed=1
-        python3 -u -m ru_schools.cli --db "$DB" export \
-            --csv data/schools.csv --jsonl data/schools.jsonl >> "$LOG" 2>&1
-        if [ $((after - snapshot_at)) -ge "$SNAPSHOT_EVERY" ]; then
-            snapshot_at=$after
+        export_all
+        # Выгрузки тяжёлые, поэтому в git они уходят не каждый круг.
+        if [ $((after - last_commit)) -ge "$COMMIT_EVERY" ]; then
+            last_commit=$after
             snapshot
+            commit_data "собрано выписок — $after"
         fi
-        commit_data "собрано выписок — $after"
     fi
 
     # Этап 3: контакты — только когда перечень и выписки закончены,

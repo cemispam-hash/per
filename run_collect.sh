@@ -31,13 +31,35 @@ PY
 done
 
 # Этап 2: выписки из ЕГРЮЛ — порциями, с выгрузкой после каждой порции.
+last_commit=0
+idle=0
 while true; do
     before=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
     say "выписки: разобрано $before"
     python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" details --limit 500 --workers "$WORKERS" >> "$LOG" 2>&1
     after=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
     python3 -u -m ru_schools.cli --db "$DB" export --csv data/schools.csv --jsonl data/schools.jsonl >> "$LOG" 2>&1
-    [ "$after" = "$before" ] && { say "новых выписок нет — этап завершён"; break; }
+    # Результат фиксируется в git пачками, чтобы не плодить коммиты.
+    if [ $((after - last_commit)) -ge 5000 ]; then
+        last_commit=$after
+        git add -A data/schools.csv data/schools.jsonl 2>/dev/null
+        git -c user.email=noreply@anthropic.com -c user.name=Claude \
+            commit -q -m "Данные: собрано выписок — $after" 2>/dev/null \
+            && say "зафиксировано в git: $after выписок"
+    fi
+    if [ "$after" = "$before" ]; then
+        idle=$((idle + 1))
+        # Ночью ЕГРЮЛ закрывает выдачу выписок на технологические работы —
+        # ждём и пробуем снова, а не завершаем этап.
+        if [ "$idle" -ge 6 ]; then
+            say "новых выписок нет после $idle попыток — этап завершён"
+            break
+        fi
+        say "выписки недоступны, пауза 10 минут (попытка $idle из 6)"
+        sleep 600
+    else
+        idle=0
+    fi
 done
 
 # Этап 3: численность работников из открытых данных ФНС.

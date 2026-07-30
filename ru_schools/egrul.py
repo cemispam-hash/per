@@ -207,7 +207,7 @@ class EgrulClient:
         for attempt in range(attempts):
             try:
                 return self._vypiska_once(token)
-            except CaptchaRequired:
+            except (CaptchaRequired, ServiceMaintenance):
                 raise
             except RuntimeError as exc:
                 last = exc
@@ -226,6 +226,7 @@ class EgrulClient:
         )
         payload = _json_or_none(r)
         if not payload or "t" not in payload:
+            _check_maintenance(r)
             raise RuntimeError(f"выписка не заказана: {r.status_code}")
         if payload.get("captchaRequired"):
             raise CaptchaRequired("ФНС запросила капчу при заказе выписки")
@@ -253,6 +254,19 @@ class EgrulClient:
 
 class CaptchaRequired(RuntimeError):
     pass
+
+
+class ServiceMaintenance(RuntimeError):
+    """Сервис ФНС закрыт на технологические работы (обычно ночью по МСК)."""
+
+
+_MAINTENANCE_MARKERS = ("Технологические работы", "временно недоступен")
+
+
+def _check_maintenance(resp) -> None:
+    text = resp.text if resp.headers.get("Content-Type", "").startswith("text/html") else ""
+    if text and any(m in text for m in _MAINTENANCE_MARKERS):
+        raise ServiceMaintenance("ФНС проводит технологические работы")
 
 
 def _json_or_none(resp) -> Optional[Dict]:

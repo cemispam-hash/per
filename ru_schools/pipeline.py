@@ -11,7 +11,7 @@ from typing import Iterable, List, Optional
 
 from . import contacts as contacts_mod
 from . import sshr
-from .egrul import SCHOOL_QUERIES, CaptchaRequired, EgrulClient
+from .egrul import SCHOOL_QUERIES, CaptchaRequired, EgrulClient, ServiceMaintenance
 from .http_client import HttpClient
 from .regions import ALL_REGION_CODES, region_name
 from .store import Store
@@ -118,12 +118,23 @@ def fetch_details(
             is_school = False
         return inn, v, is_school
 
+    maintenance = False
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(work, r): r["inn"] for r in pending}
         for fut in as_completed(futures):
             inn = futures[fut]
             try:
                 inn, v, is_school = fut.result()
+            except ServiceMaintenance:
+                if not maintenance:
+                    maintenance = True
+                    log.warning(
+                        "ЕГРЮЛ на технологических работах — выписки временно "
+                        "недоступны, этап будет продолжен позже"
+                    )
+                for pending_fut in futures:
+                    pending_fut.cancel()
+                continue
             except Exception as exc:
                 store.add_failure(inn, "details", str(exc))
                 continue

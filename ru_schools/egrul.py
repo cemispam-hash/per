@@ -20,20 +20,18 @@ log = logging.getLogger(__name__)
 BASE = "https://egrul.nalog.ru"
 
 # Поисковые запросы, покрывающие организационные формы школ.
+# Поиск ЕГРЮЛ ищет вхождение подстроки, поэтому «ОБЩЕОБРАЗОВАТЕЛЬНАЯ ШКОЛА»
+# сама по себе покрывает среднюю, основную и начальную школу — отдельные
+# запросы на них только увеличили бы число обращений к сервису.
 SCHOOL_QUERIES = [
-    "СРЕДНЯЯ ОБЩЕОБРАЗОВАТЕЛЬНАЯ ШКОЛА",
-    "ОСНОВНАЯ ОБЩЕОБРАЗОВАТЕЛЬНАЯ ШКОЛА",
-    "НАЧАЛЬНАЯ ОБЩЕОБРАЗОВАТЕЛЬНАЯ ШКОЛА",
     "ОБЩЕОБРАЗОВАТЕЛЬНАЯ ШКОЛА",
     "СРЕДНЯЯ ШКОЛА",
-    "ОБЩЕОБРАЗОВАТЕЛЬНАЯ ОРГАНИЗАЦИЯ",
     "ГИМНАЗИЯ",
     "ЛИЦЕЙ",
     "ШКОЛА-ИНТЕРНАТ",
     "КАДЕТСКАЯ ШКОЛА",
     "КАДЕТСКИЙ КОРПУС",
     "ВЕЧЕРНЯЯ ШКОЛА",
-    "ШКОЛА",
 ]
 
 
@@ -98,11 +96,19 @@ def _split_head(raw: str) -> tuple:
 
 
 class EgrulClient:
-    def __init__(self, http: HttpClient):
+    def __init__(self, http: HttpClient, vyp_http: Optional[HttpClient] = None):
+        """`vyp_http` — отдельный клиент для выписок.
+
+        Жёстко ограничен именно поисковый POST; загрузка выписки идёт
+        обычными GET-запросами и допускает более высокую частоту.
+        """
         self.http = http
+        self.vyp = vyp_http or http
         self._primed = False
         # После сброса сессии клиентом нужно заново получить cookie.
         http.on_throttle = self._invalidate
+        if self.vyp is not http:
+            self.vyp.on_throttle = self._invalidate
 
     def _invalidate(self) -> None:
         self._primed = False
@@ -214,7 +220,7 @@ class EgrulClient:
 
     def _vypiska_once(self, token: str) -> bytes:
         self._prime()
-        r = self.http.get(
+        r = self.vyp.get(
             f"{BASE}/vyp-request/{token}",
             headers={"X-Requested-With": "XMLHttpRequest", "Referer": f"{BASE}/index.html"},
         )
@@ -226,7 +232,7 @@ class EgrulClient:
         vt = payload["t"]
 
         for _ in range(20):
-            s = self.http.get(
+            s = self.vyp.get(
                 f"{BASE}/vyp-status/{vt}",
                 headers={"X-Requested-With": "XMLHttpRequest"},
             )
@@ -239,7 +245,7 @@ class EgrulClient:
         else:
             raise RuntimeError("выписка не подготовлена за отведённое время")
 
-        d = self.http.get(f"{BASE}/vyp-download/{vt}")
+        d = self.vyp.get(f"{BASE}/vyp-download/{vt}")
         if d.status_code != 200 or not d.content.startswith(b"%PDF"):
             raise RuntimeError(f"скачивание выписки не удалось: {d.status_code}")
         return d.content

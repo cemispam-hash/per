@@ -92,9 +92,14 @@ def fetch_details(
     http: HttpClient,
     limit: Optional[int] = None,
     workers: int = 4,
+    vyp_rate: float = 2.5,
 ) -> int:
-    """Этап 2. Официальная выписка из ЕГРЮЛ: адрес, ОКВЭД, руководитель."""
-    client = EgrulClient(http)
+    """Этап 2. Официальная выписка из ЕГРЮЛ: адрес, ОКВЭД, руководитель.
+
+    Выписки качаются отдельным клиентом: строгий лимит частоты у ФНС
+    действует на поисковый POST, а не на загрузку выписки.
+    """
+    client = EgrulClient(http, vyp_http=HttpClient(rate=vyp_rate))
     pending = store.pending_details(limit)
     if not pending:
         return 0

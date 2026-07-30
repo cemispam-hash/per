@@ -187,7 +187,8 @@ class Store:
     def pending_details(self, limit: Optional[int] = None) -> List[sqlite3.Row]:
         sql = """SELECT o.inn, o.token, o.region_code, o.region_name
                  FROM orgs o LEFT JOIN details d ON d.inn = o.inn
-                 WHERE d.inn IS NULL AND (o.terminated_date IS NULL OR o.terminated_date = '')"""
+                 WHERE d.inn IS NULL AND (o.terminated_date IS NULL OR o.terminated_date = '')
+                 ORDER BY o.region_code, o.inn"""
         if limit:
             sql += f" LIMIT {int(limit)}"
         return self.conn.execute(sql).fetchall()

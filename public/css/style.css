@@ -265,12 +265,28 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 
 .hero {
   position: relative;
+  /* фото перевозки эвакуатором под фирменным «ночным» затемнением */
   background:
-    radial-gradient(900px 420px at 78% -10%, rgba(255, 176, 32, .17), transparent 62%),
-    radial-gradient(700px 380px at 12% 110%, rgba(66, 100, 150, .18), transparent 60%),
+    radial-gradient(900px 420px at 78% -10%, rgba(255, 176, 32, .14), transparent 62%),
+    linear-gradient(99deg,
+      rgba(13, 17, 24, .9) 0%,
+      rgba(13, 17, 24, .74) 40%,
+      rgba(16, 21, 29, .38) 74%,
+      rgba(16, 21, 29, .6) 100%),
+    url('../img/hero-tow.jpg') center 30% / cover no-repeat,
     var(--night);
   color: #fff;
   overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .hero {
+    background:
+      radial-gradient(560px 300px at 80% -8%, rgba(255, 176, 32, .13), transparent 62%),
+      linear-gradient(rgba(13, 17, 24, .9), rgba(13, 17, 24, .84)),
+      url('../img/hero-tow-960.jpg') center 30% / cover no-repeat,
+      var(--night);
+  }
 }
 
 /* осевая разметка дороги */
@@ -897,8 +913,10 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   .nav.is-open { display: flex; }
   .nav a { padding-block: 11px; font-size: 16px; }
   .burger { display: flex; margin-left: auto; }
+  .header__in { gap: 10px; }
   .header__phone small, .header .btn { display: none; }
-  .header__phone { margin-left: 4px; }
+  .header__phone { margin-left: auto; }
+  .header__phone a { font-size: 14px; }
   .hero__stats { grid-template-columns: repeat(2, 1fr); }
   .cards, .cards--4 { grid-template-columns: 1fr; }
   .cta-band__in { grid-template-columns: 1fr; }

@@ -1,5 +1,5 @@
 {
-  "_comment": "Прообраз таблицы routes в PostgreSQL. Каждая запись = одна SEO-страница /avtovoz-{slug}",
+  "_comment": "Сид таблицы routes. city_from_gen — родительный падеж (из …), city_to_gen — винительный (в/во …)",
   "routes": [
     {
       "slug": "moskva-vladivostok",
@@ -16,8 +16,24 @@
       "price_pickup": 125000,
       "price_moto": 45000,
       "price_closed_sedan": 165000,
-      "waypoints": ["Москва", "Казань", "Екатеринбург", "Новосибирск", "Иркутск", "Чита", "Хабаровск", "Владивосток"],
-      "highways": ["М-7 «Волга»", "Р-242", "Р-254 «Иртыш»", "Р-255 «Сибирь»", "Р-258 «Байкал»", "А-370 «Уссури»"],
+      "waypoints": [
+        "Москва",
+        "Казань",
+        "Екатеринбург",
+        "Новосибирск",
+        "Иркутск",
+        "Чита",
+        "Хабаровск",
+        "Владивосток"
+      ],
+      "highways": [
+        "М-7 «Волга»",
+        "Р-242",
+        "Р-254 «Иртыш»",
+        "Р-255 «Сибирь»",
+        "Р-258 «Байкал»",
+        "А-370 «Уссури»"
+      ],
       "is_popular": true
     },
     {
@@ -28,7 +44,9 @@
       "days_min": 1,
       "days_max": 2,
       "price_sedan": 15000,
-      "is_popular": true
+      "is_popular": true,
+      "city_from_gen": "Москвы",
+      "city_to_gen": "Санкт-Петербург"
     },
     {
       "slug": "moskva-ekaterinburg",
@@ -38,7 +56,9 @@
       "days_min": 2,
       "days_max": 4,
       "price_sedan": 28000,
-      "is_popular": true
+      "is_popular": true,
+      "city_from_gen": "Москвы",
+      "city_to_gen": "Екатеринбург"
     },
     {
       "slug": "moskva-novosibirsk",
@@ -48,7 +68,9 @@
       "days_min": 4,
       "days_max": 6,
       "price_sedan": 45000,
-      "is_popular": true
+      "is_popular": true,
+      "city_from_gen": "Москвы",
+      "city_to_gen": "Новосибирск"
     },
     {
       "slug": "moskva-krasnodar",
@@ -58,7 +80,9 @@
       "days_min": 2,
       "days_max": 3,
       "price_sedan": 22000,
-      "is_popular": true
+      "is_popular": true,
+      "city_from_gen": "Москвы",
+      "city_to_gen": "Краснодар"
     },
     {
       "slug": "moskva-sochi",
@@ -68,7 +92,9 @@
       "days_min": 2,
       "days_max": 4,
       "price_sedan": 27000,
-      "is_popular": true
+      "is_popular": true,
+      "city_from_gen": "Москвы",
+      "city_to_gen": "Сочи"
     },
     {
       "slug": "sankt-peterburg-vladivostok",
@@ -78,7 +104,9 @@
       "days_min": 11,
       "days_max": 15,
       "price_sedan": 105000,
-      "is_popular": true
+      "is_popular": true,
+      "city_from_gen": "Санкт-Петербурга",
+      "city_to_gen": "Владивосток"
     },
     {
       "slug": "moskva-kaliningrad",
@@ -88,7 +116,9 @@
       "days_min": 3,
       "days_max": 5,
       "price_sedan": 35000,
-      "is_popular": true
+      "is_popular": true,
+      "city_from_gen": "Москвы",
+      "city_to_gen": "Калининград"
     }
   ]
 }

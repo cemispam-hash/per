@@ -1,129 +1,67 @@
-# ПеревозАвто — лендинг перевозки автомобилей между городами
+# ПеревозАвто — лендинг перевозки автомобилей (Laravel + PostgreSQL)
 
-Высококонверсионный лендинг + шаблон SEO-страниц «город — город».
-Статическая вёрстка, спроектированная под последующий перенос на **Laravel + PostgreSQL**.
+Высококонверсионный лендинг + генерируемые из базы SEO-страницы «город — город».
+Laravel 13, PHP 8.4, PostgreSQL.
 
-## Структура
+## Быстрый старт
 
+```bash
+composer install
+cp .env.example .env          # уже настроен на PostgreSQL
+php artisan key:generate
+
+# создать базу perevozavto в PostgreSQL, затем:
+php artisan migrate --seed    # 8 стартовых маршрутов из database/seeders/data/routes.json
+php artisan serve
 ```
-index.html                        — главный лендинг
-avtovoz-moskva-vladivostok.html   — шаблон SEO-страницы маршрута (будущая Blade-вьюха)
-css/style.css                     — единая дизайн-система (токены в :root)
-js/main.js                        — меню, маска телефона, формы, дата загрузки
-data/routes.json                  — прообраз таблицы routes в PostgreSQL
-```
+
+Для локальной разработки без PostgreSQL достаточно указать в `.env`
+`DB_CONNECTION=sqlite` и создать файл `database/database.sqlite`.
+
+## Как это устроено
+
+| Что | Где |
+|---|---|
+| Главная | `GET /` → `HomeController` → `resources/views/home.blade.php` |
+| SEO-страница маршрута | `GET /avtovoz-{slug}` → `RouteController` → `route.blade.php` |
+| Приём заявок | `POST /leads` → `LeadController` (JSON, throttle 10/мин) |
+| Sitemap | `GET /sitemap.xml` → `SitemapController` (все маршруты из базы) |
+| Данные маршрутов | таблица `routes`, модель `App\Models\TransportRoute` |
+| Заявки | таблица `leads`, модель `App\Models\Lead` |
+| Контакты и реквизиты | `config/landing.php` — заменить перед запуском |
+| Стили (дизайн-токены в `:root`) | `public/css/style.css` |
+| JS: маска телефона, формы, меню | `public/js/main.js` |
+
+**Новая SEO-страница = одна запись в таблице `routes`** (сидер или админка в будущем):
+slug, города (+ падежные формы `city_from_gen` «из Москвы», `city_to_gen` «во Владивосток»),
+расстояние, сроки, цены по типам кузова, `waypoints`/`highways` (jsonb), опциональные
+`seo_text`, `meta_title`, `meta_description`. Всё остальное — заголовки, метатеги,
+таблица цен (недостающие типы кузова досчитываются коэффициентами в
+`TransportRoute::price()`), Schema.org (Service, Offer, FAQPage, BreadcrumbList),
+перелинковка и sitemap — собирается автоматически.
 
 ## Дизайн-система
 
-Концепция «ночная трасса»: тёмный асфальт `#10151d`, янтарная разметка/фары `#ffb020`,
-мотив пунктирной осевой линии и «сигнальной ленты» автовоза (амбер-штриховка).
+Концепция «ночная трасса»: тёмный асфальт `#10151d`, янтарная разметка `#ffb020`,
+пунктирная осевая линия, «сигнальная лента» на CTA. В hero — фотография перевозки
+автомобиля эвакуатором, затонированная под палитру (обесцвечивание + синий подтон,
+поверх — градиентное затемнение в CSS). Шрифты: Unbounded (заголовки) + Golos Text.
 
-- Дисплейный шрифт: **Unbounded** (заголовки, цифры-акценты)
-- Текстовый: **Golos Text**
-- Все токены — CSS-переменные в `:root` (`css/style.css`), менять палитру можно в одном месте.
+Фото: Wikimedia Commons, «Car carrier loading Maybach in Tokyo», лицензия CC0
+(public domain) — можно использовать без атрибуции; чужой брендинг на платформе замыт.
 
 ## Конверсионные элементы
 
-- Калькулятор-форма в первом экране (главный лид-магнит) + предзаполнение маршрута на SEO-страницах
-- Телефон 8-800 в липкой шапке, липкая CTA-панель на мобильных
-- «Ближайшая загрузка» — дата генерируется JS (сегодня + 2 дня), создаёт срочность
-- Оплата после доставки, страховка, договор — сняты ключевые страхи ЦА
-- Таблица маршрутов с ценами (транзакционный интент), отзывы с маршрутами, FAQ
+- Калькулятор-форма в первом экране; на страницах маршрутов — с предзаполненными городами
+- Телефон 8-800 в липкой шапке + липкая CTA-панель на мобильных
+- «Ближайшая загрузка» — дата (сегодня + 2 дня) в JS, элемент срочности
+- Снятие страхов: оплата после доставки, страховка до 5 млн ₽, договор, ГЛОНАСС, фотоотчёт
+- Таблицы цен, отзывы с маршрутами, FAQ-аккордеон с разметкой FAQPage
 
-## SEO
+## Что доделать перед продакшеном
 
-- Уникальные title/description на каждой странице, canonical, Open Graph
-- Schema.org JSON-LD: `MovingCompany`, `Service` + `Offer`, `FAQPage`, `BreadcrumbList`
-- Перелинковка: таблица маршрутов → страницы маршрутов → «другие направления» в футере
-- SEO-текст с H2/H3 и вхождениями «перевозка автомобилей {город} — {город}», «автовоз»
-
-## План переноса на Laravel + PostgreSQL
-
-### 1. Миграция `routes`
-
-```php
-Schema::create('routes', function (Blueprint $table) {
-    $table->id();
-    $table->string('slug')->unique();          // moskva-vladivostok
-    $table->string('city_from');
-    $table->string('city_to');
-    $table->string('city_from_gen')->nullable(); // «из Москвы» — родительный падеж
-    $table->string('city_to_gen')->nullable();
-    $table->unsignedInteger('distance_km');
-    $table->unsignedTinyInteger('days_min');
-    $table->unsignedTinyInteger('days_max');
-    $table->unsignedInteger('price_sedan');
-    $table->unsignedInteger('price_crossover')->nullable();
-    $table->unsignedInteger('price_suv')->nullable();
-    $table->unsignedInteger('price_pickup')->nullable();
-    $table->unsignedInteger('price_moto')->nullable();
-    $table->unsignedInteger('price_closed_sedan')->nullable();
-    $table->jsonb('waypoints')->nullable();    // города по пути
-    $table->jsonb('highways')->nullable();     // трассы
-    $table->text('seo_text')->nullable();      // уникальный текст страницы
-    $table->string('meta_title')->nullable();  // переопределение шаблонного title
-    $table->string('meta_description')->nullable();
-    $table->boolean('is_popular')->default(false);
-    $table->timestamps();
-});
-
-Schema::create('leads', function (Blueprint $table) {
-    $table->id();
-    $table->string('phone');
-    $table->string('city_from')->nullable();
-    $table->string('city_to')->nullable();
-    $table->string('car_type')->nullable();
-    $table->string('page_url')->nullable();    // с какой страницы пришёл лид
-    $table->string('utm_source')->nullable();
-    $table->timestamps();
-});
-```
-
-Стартовые данные — в `data/routes.json` (сидер).
-
-### 2. Роутинг
-
-```php
-Route::get('/', HomeController::class);
-Route::get('/avtovoz-{route:slug}', RouteController::class); // model binding по slug
-Route::post('/api/leads', LeadController::class);
-```
-
-### 3. Blade-разметка
-
-`avtovoz-moskva-vladivostok.html` режется на layout и partials:
-
-| Фрагмент HTML                    | Blade                                  |
-|----------------------------------|----------------------------------------|
-| `<head>` + шапка + футер         | `layouts/app.blade.php`                |
-| `.calc` (форма-калькулятор)      | `partials/calc.blade.php` (пропсы from/to) |
-| `.routes-table`                  | `partials/routes-table.blade.php`      |
-| `.faq` + FAQPage JSON-LD         | `partials/faq.blade.php`               |
-| страница маршрута                | `pages/route.blade.php`                |
-
-Шаблонные метатеги в `route.blade.php`:
-
-```
-title: «Автовоз {city_from} — {city_to}: перевозка автомобилей,
-        цена от {price_sedan} ₽ | ПеревозАвто»
-h1:    «Автовоз {city_from} — {city_to}: перевозка автомобилей от {price_sedan} ₽»
-```
-
-Для избежания дублей у сотен страниц — заполнять `seo_text` уникальным текстом
-(хотя бы для топ-20 маршрутов) и держать `meta_title` переопределяемым.
-
-### 4. Формы
-
-В `js/main.js` отправка помечена комментарием — заменить имитацию на
-`fetch('/api/leads', ...)`, добавить CSRF-токен и уведомление в Telegram/CRM.
-
-### 5. Sitemap
-
-`spatie/laravel-sitemap`: главная + все `routes` → `/sitemap.xml`, обновлять по cron.
-
-## Что заменить перед запуском
-
-- Телефон `8 (800) 550-44-70`, e-mail, адрес, ИНН — плейсхолдеры
-- Домен `perevozavto.example` в canonical/OG/JSON-LD
-- Ссылки-заглушки `href="#"` на страницы маршрутов — по мере создания страниц
-- Политика ПДн и оферта — подключить реальные документы
+- Заменить контакты в `config/landing.php` и домен в `APP_URL`
+- Подключить уведомления о лидах (Telegram/CRM) в `LeadController@store` — место помечено
+- Страницы политики ПДн и оферты (ссылки в футере — заглушки)
+- Заполнить `seo_text` уникальными текстами хотя бы для топ-маршрутов
+- Кэширование: `php artisan config:cache route:cache view:cache`, кэш ответов страниц маршрутов

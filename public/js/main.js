@@ -39,9 +39,21 @@
     });
   });
 
-  /* ---------- Отправка лид-форм ----------
-     Сейчас — имитация. На Laravel заменить на
-     fetch('/api/leads', { method: 'POST', body: new FormData(form) }) */
+  /* ---------- Отправка лид-форм ---------- */
+  var csrf = document.querySelector('meta[name="csrf-token"]');
+
+  function showSuccess(form) {
+    var calc = form.closest('.calc');
+    if (calc) {
+      calc.classList.add('is-sent');
+    } else {
+      var btn = form.querySelector('button[type="submit"]');
+      btn.textContent = 'Заявка принята ✓';
+      btn.disabled = true;
+      form.querySelectorAll('input').forEach(function (i) { i.disabled = true; });
+    }
+  }
+
   document.querySelectorAll('[data-lead-form]').forEach(function (form) {
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -55,15 +67,32 @@
         return;
       }
 
-      var calc = form.closest('.calc');
-      if (calc) {
-        calc.classList.add('is-sent');
-      } else {
-        var btn = form.querySelector('button[type="submit"]');
-        btn.textContent = 'Заявка принята ✓';
-        btn.disabled = true;
-        form.querySelectorAll('input').forEach(function (i) { i.disabled = true; });
+      if (!form.action || form.action.indexOf('http') !== 0) {
+        showSuccess(form); // статический прототип без бэкенда
+        return;
       }
+
+      var btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+
+      fetch(form.action, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrf ? csrf.content : '',
+          'Accept': 'application/json'
+        },
+        body: new FormData(form)
+      }).then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        showSuccess(form);
+      }).catch(function () {
+        btn.disabled = false;
+        if (phone) {
+          phone.setCustomValidity('Не удалось отправить. Позвоните нам: 8 (800) 550-44-70');
+          phone.reportValidity();
+          phone.addEventListener('input', function () { phone.setCustomValidity(''); }, { once: true });
+        }
+      });
     });
   });
 

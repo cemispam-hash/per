@@ -1,62 +1,24 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Перевозка автомобилей автовозом по России — цены от 15 000 ₽ | ПеревозАвто</title>
-  <meta name="description" content="Перевозка автомобилей автовозом между городами России. Открытые и закрытые автовозы, страховка до 5 млн ₽, договор, ГЛОНАСС-контроль. Рассчитайте стоимость за 15 минут.">
-  <link rel="canonical" href="https://perevozavto.example/">
-  <meta property="og:title" content="Перевозка автомобилей автовозом по России | ПеревозАвто">
-  <meta property="og:description" content="Доставим ваш автомобиль в любой город России. Страховка, договор, фотоотчёт на каждом этапе.">
-  <meta property="og:type" content="website">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "MovingCompany",
-    "name": "ПеревозАвто",
-    "description": "Перевозка автомобилей автовозами между городами России",
-    "telephone": "+78005504470",
-    "areaServed": "RU",
-    "priceRange": "15000-150000 RUB",
-    "aggregateRating": {
-      "@type": "AggregateRating",
-      "ratingValue": "4.9",
-      "reviewCount": "1284"
-    }
-  }
-  </script>
-</head>
-<body>
+@extends('layouts.app')
 
-  <!-- ============ Шапка ============ -->
-  <header class="header">
-    <div class="container header__in">
-      <a class="logo" href="/">Перевоз<b>Авто</b><span class="logo__mark" aria-hidden="true"></span></a>
+@section('title', 'Перевозка автомобилей автовозом по России — цены от 15 000 ₽ | ПеревозАвто')
+@section('meta_description', 'Перевозка автомобилей автовозом между городами России. Открытые и закрытые автовозы, страховка до 5 млн ₽, договор, ГЛОНАСС-контроль. Рассчитайте стоимость за 15 минут.')
 
-      <nav class="nav" id="nav" aria-label="Основное меню">
-        <a href="#routes">Направления</a>
-        <a href="#services">Цены</a>
-        <a href="#how">Как работаем</a>
-        <a href="#reviews">Отзывы</a>
-        <a href="#faq">Вопросы</a>
-      </nav>
+@push('jsonld')
+<script type="application/ld+json">
+{!! json_encode([
+    '@context' => 'https://schema.org',
+    '@type' => 'MovingCompany',
+    'name' => 'ПеревозАвто',
+    'description' => 'Перевозка автомобилей автовозами между городами России',
+    'telephone' => config('landing.phone_href'),
+    'areaServed' => 'RU',
+    'priceRange' => '15000-150000 RUB',
+    'aggregateRating' => ['@type' => 'AggregateRating', 'ratingValue' => '4.9', 'reviewCount' => '1284'],
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!}
+</script>
+@endpush
 
-      <div class="header__phone">
-        <a href="tel:+78005504470" class="num">8 (800) 550-44-70</a>
-        <small>Бесплатно по России, 24/7</small>
-      </div>
-
-      <a class="btn btn--accent" href="#calc">Рассчитать стоимость</a>
-
-      <button class="burger" id="burger" aria-label="Открыть меню" aria-expanded="false" aria-controls="nav">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </header>
+@section('content')
 
   <!-- ============ Hero + калькулятор ============ -->
   <section class="hero">
@@ -74,47 +36,7 @@
           </ul>
         </div>
 
-        <!-- Форма-калькулятор: главный конверсионный элемент -->
-        <div class="calc" id="calc">
-          <div class="calc__hazard" aria-hidden="true"></div>
-          <div class="calc__body">
-            <p class="calc__title">Расчёт стоимости перевозки</p>
-            <p class="calc__note">Точная цена и ближайшая дата загрузки — ответим за 15 минут</p>
-            <form data-lead-form>
-              <div class="field-row">
-                <div class="field">
-                  <label for="city-from">Откуда</label>
-                  <input id="city-from" name="city_from" list="cities" placeholder="Москва" required autocomplete="off">
-                </div>
-                <div class="field">
-                  <label for="city-to">Куда</label>
-                  <input id="city-to" name="city_to" list="cities" placeholder="Владивосток" required autocomplete="off">
-                </div>
-              </div>
-              <div class="field">
-                <label for="car-type">Тип автомобиля</label>
-                <select id="car-type" name="car_type">
-                  <option>Легковой седан / хэтчбек</option>
-                  <option>Кроссовер / внедорожник</option>
-                  <option>Минивэн / микроавтобус</option>
-                  <option>Пикап</option>
-                  <option>Мотоцикл / квадроцикл</option>
-                  <option>Другое</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="phone">Телефон</label>
-                <input id="phone" name="phone" type="tel" inputmode="tel" placeholder="+7 (___) ___-__-__" required>
-              </div>
-              <button type="submit" class="btn btn--accent btn--block">Рассчитать стоимость</button>
-              <p class="calc__legal">Нажимая кнопку, вы соглашаетесь с <a href="#">политикой обработки персональных данных</a></p>
-            </form>
-          </div>
-          <div class="calc__success" role="status">
-            <p class="h3">Заявка принята ✓</p>
-            <p>Логист уже считает ваш маршрут. Перезвоним в течение 15 минут в рабочее время.</p>
-          </div>
-        </div>
+        @include('partials.calc', ['cities' => $cities])
       </div>
 
       <div class="hero__stats">
@@ -124,21 +46,6 @@
         <div><b class="num">4,9 из 5</b><span>рейтинг на Яндексе</span></div>
       </div>
     </div>
-
-    <datalist id="cities">
-      <option value="Москва"></option>
-      <option value="Санкт-Петербург"></option>
-      <option value="Владивосток"></option>
-      <option value="Новосибирск"></option>
-      <option value="Екатеринбург"></option>
-      <option value="Краснодар"></option>
-      <option value="Сочи"></option>
-      <option value="Казань"></option>
-      <option value="Иркутск"></option>
-      <option value="Хабаровск"></option>
-      <option value="Калининград"></option>
-      <option value="Челябинск"></option>
-    </datalist>
   </section>
 
   <!-- ============ Популярные направления ============ -->
@@ -161,54 +68,14 @@
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td><a class="route-link" href="avtovoz-moskva-vladivostok.html">Москва — Владивосток</a></td>
-              <td>9 100 км</td>
-              <td>10–14 дней</td>
-              <td class="price">от 95 000 ₽</td>
-            </tr>
-            <tr>
-              <td><a class="route-link" href="#">Москва — Санкт-Петербург</a></td>
-              <td>710 км</td>
-              <td>1–2 дня</td>
-              <td class="price">от 15 000 ₽</td>
-            </tr>
-            <tr>
-              <td><a class="route-link" href="#">Москва — Екатеринбург</a></td>
-              <td>1 790 км</td>
-              <td>2–4 дня</td>
-              <td class="price">от 28 000 ₽</td>
-            </tr>
-            <tr>
-              <td><a class="route-link" href="#">Москва — Новосибирск</a></td>
-              <td>3 300 км</td>
-              <td>4–6 дней</td>
-              <td class="price">от 45 000 ₽</td>
-            </tr>
-            <tr>
-              <td><a class="route-link" href="#">Москва — Краснодар</a></td>
-              <td>1 350 км</td>
-              <td>2–3 дня</td>
-              <td class="price">от 22 000 ₽</td>
-            </tr>
-            <tr>
-              <td><a class="route-link" href="#">Москва — Сочи</a></td>
-              <td>1 620 км</td>
-              <td>2–4 дня</td>
-              <td class="price">от 27 000 ₽</td>
-            </tr>
-            <tr>
-              <td><a class="route-link" href="#">Санкт-Петербург — Владивосток</a></td>
-              <td>9 800 км</td>
-              <td>11–15 дней</td>
-              <td class="price">от 105 000 ₽</td>
-            </tr>
-            <tr>
-              <td><a class="route-link" href="#">Москва — Калининград</a></td>
-              <td>1 260 км</td>
-              <td>3–5 дней</td>
-              <td class="price">от 35 000 ₽</td>
-            </tr>
+            @foreach ($popular as $r)
+              <tr>
+                <td><a class="route-link" href="{{ $r->url }}">{{ $r->title }}</a></td>
+                <td>{{ $r::money($r->distance_km) }} км</td>
+                <td>{{ $r->days_min }}–{{ $r->days_max }} {{ $r->days_max >= 5 ? 'дней' : 'дня' }}</td>
+                <td class="price">от {{ $r::money($r->price_sedan) }} ₽</td>
+              </tr>
+            @endforeach
           </tbody>
         </table>
       </div>
@@ -396,75 +263,22 @@
         <h2 class="h2">Частые вопросы о перевозке автомобилей</h2>
       </div>
 
-      <div class="faq">
-        <details>
-          <summary>Сколько стоит перевозка автомобиля между городами?</summary>
-          <div>
-            <p>Цена зависит от маршрута, габаритов автомобиля и типа автовоза. Ориентиры: Москва — Санкт-Петербург от 15 000 ₽, Москва — Екатеринбург от 28 000 ₽, Москва — Владивосток от 95 000 ₽. Точную стоимость логист назовёт за 15 минут после заявки.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Нужно ли моё присутствие при погрузке и выгрузке?</summary>
-          <div>
-            <p>Нет. Передать и принять автомобиль может любой человек по простой доверенности — родственник, покупатель, менеджер автосалона. Мы часто забираем машины прямо с аукционов и у дилеров.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Что будет, если машину повредят в пути?</summary>
-          <div>
-            <p>Каждый автомобиль застрахован на полную стоимость, а его состояние зафиксировано в акте с фотографиями при погрузке. Любое расхождение при выдаче — страховой случай, ущерб компенсируется страховой компанией.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Можно ли перевезти неисправный автомобиль?</summary>
-          <div>
-            <p>Да, если автомобиль катится и управляется — погрузим лебёдкой без доплат по большинству направлений. Для полностью обездвиженных машин подберём эвакуатор или автовоз с гидробортом.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Какие документы нужны для перевозки?</summary>
-          <div>
-            <p>Достаточно СТС или ПТС (можно копию) и вашего паспорта. Автомобиль перевозится как груз, поэтому ОСАГО и присутствие владельца не требуются.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Можно ли оставить вещи в машине?</summary>
-          <div>
-            <p>Да, в багажнике и салоне можно перевезти до 100 кг личных вещей бесплатно. Ценности и документы рекомендуем не оставлять — они не покрываются страховкой груза.</p>
-          </div>
-        </details>
-      </div>
+      @include('partials.faq', ['faq' => [
+        ['q' => 'Сколько стоит перевозка автомобиля между городами?',
+         'a' => 'Цена зависит от маршрута, габаритов автомобиля и типа автовоза. Ориентиры: Москва — Санкт-Петербург от 15 000 ₽, Москва — Екатеринбург от 28 000 ₽, Москва — Владивосток от 95 000 ₽. Точную стоимость логист назовёт за 15 минут после заявки.'],
+        ['q' => 'Нужно ли моё присутствие при погрузке и выгрузке?',
+         'a' => 'Нет. Передать и принять автомобиль может любой человек по простой доверенности — родственник, покупатель, менеджер автосалона. Мы часто забираем машины прямо с аукционов и у дилеров.'],
+        ['q' => 'Что будет, если машину повредят в пути?',
+         'a' => 'Каждый автомобиль застрахован на полную стоимость, а его состояние зафиксировано в акте с фотографиями при погрузке. Любое расхождение при выдаче — страховой случай, ущерб компенсируется страховой компанией.'],
+        ['q' => 'Можно ли перевезти неисправный автомобиль?',
+         'a' => 'Да, если автомобиль катится и управляется — погрузим лебёдкой без доплат по большинству направлений. Для полностью обездвиженных машин подберём эвакуатор или автовоз с гидробортом.'],
+        ['q' => 'Какие документы нужны для перевозки?',
+         'a' => 'Достаточно СТС или ПТС (можно копию) и вашего паспорта. Автомобиль перевозится как груз, поэтому ОСАГО и присутствие владельца не требуются.'],
+        ['q' => 'Можно ли оставить вещи в машине?',
+         'a' => 'Да, в багажнике и салоне можно перевезти до 100 кг личных вещей бесплатно. Ценности и документы рекомендуем не оставлять — они не покрываются страховкой груза.'],
+      ]])
     </div>
   </section>
-
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "Сколько стоит перевозка автомобиля между городами?",
-        "acceptedAnswer": { "@type": "Answer", "text": "Цена зависит от маршрута, габаритов автомобиля и типа автовоза. Москва — Санкт-Петербург от 15 000 ₽, Москва — Екатеринбург от 28 000 ₽, Москва — Владивосток от 95 000 ₽." }
-      },
-      {
-        "@type": "Question",
-        "name": "Нужно ли моё присутствие при погрузке и выгрузке?",
-        "acceptedAnswer": { "@type": "Answer", "text": "Нет, передать и принять автомобиль может любой человек по простой доверенности." }
-      },
-      {
-        "@type": "Question",
-        "name": "Что будет, если машину повредят в пути?",
-        "acceptedAnswer": { "@type": "Answer", "text": "Каждый автомобиль застрахован на полную стоимость, состояние фиксируется в акте с фото. Ущерб компенсирует страховая компания." }
-      },
-      {
-        "@type": "Question",
-        "name": "Можно ли перевезти неисправный автомобиль?",
-        "acceptedAnswer": { "@type": "Answer", "text": "Да, если автомобиль катится — погрузим лебёдкой. Для обездвиженных машин подберём эвакуатор или автовоз с гидробортом." }
-      }
-    ]
-  }
-  </script>
 
   <!-- ============ CTA-полоса ============ -->
   <section class="cta-band">
@@ -473,9 +287,9 @@
         <h2 class="h2">Узнайте точную стоимость за 15 минут</h2>
         <p>Оставьте телефон — логист рассчитает маршрут и назовёт ближайшую дату загрузки.</p>
       </div>
-      <form class="cta-band__form" data-lead-form>
-        <label class="visually-hidden" for="cta-phone" hidden>Телефон</label>
-        <input id="cta-phone" name="phone" type="tel" inputmode="tel" placeholder="+7 (___) ___-__-__" required>
+      <form class="cta-band__form" data-lead-form action="{{ route('leads.store') }}" method="post">
+        @csrf
+        <input id="cta-phone" name="phone" type="tel" inputmode="tel" placeholder="+7 (___) ___-__-__" required aria-label="Телефон">
         <button type="submit" class="btn">Жду звонка</button>
       </form>
     </div>
@@ -498,61 +312,4 @@
     </div>
   </section>
 
-  <!-- ============ Футер ============ -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer__routes" id="footer-routes">
-        <h3 class="h3">Направления перевозки автомобилей</h3>
-        <div class="footer__routes-grid">
-          <a href="avtovoz-moskva-vladivostok.html">Москва — Владивосток</a>
-          <a href="#">Москва — Санкт-Петербург</a>
-          <a href="#">Москва — Екатеринбург</a>
-          <a href="#">Москва — Новосибирск</a>
-          <a href="#">Москва — Краснодар</a>
-          <a href="#">Москва — Сочи</a>
-          <a href="#">Москва — Казань</a>
-          <a href="#">Москва — Калининград</a>
-          <a href="#">Москва — Иркутск</a>
-          <a href="#">Москва — Хабаровск</a>
-          <a href="#">Санкт-Петербург — Владивосток</a>
-          <a href="#">Санкт-Петербург — Сочи</a>
-          <a href="#">Владивосток — Москва</a>
-          <a href="#">Новосибирск — Москва</a>
-          <a href="#">Краснодар — Москва</a>
-          <a href="#">Екатеринбург — Сочи</a>
-        </div>
-      </div>
-
-      <div class="footer__main">
-        <div>
-          <a class="logo" href="/">Перевоз<b>Авто</b><span class="logo__mark" aria-hidden="true"></span></a>
-          <p>Перевозка автомобилей автовозами между городами России. Работаем с 2014 года.</p>
-        </div>
-        <div>
-          <p class="footer__phone num"><a href="tel:+78005504470">8 (800) 550-44-70</a></p>
-          <p><a href="mailto:info@perevozavto.example">info@perevozavto.example</a></p>
-          <p>Ежедневно с 8:00 до 22:00 (МСК)</p>
-        </div>
-        <div>
-          <p>Москва, Варшавское шоссе, 42, офис 314</p>
-          <p><a href="#">Политика обработки персональных данных</a></p>
-          <p><a href="#">Договор-оферта</a></p>
-        </div>
-      </div>
-
-      <div class="footer__bottom">
-        <span>© 2014–2026 «ПеревозАвто». ООО «ПеревозАвто», ИНН 7700000000</span>
-        <span>Цены на сайте не являются публичной офертой</span>
-      </div>
-    </div>
-  </footer>
-
-  <!-- ============ Липкая мобильная CTA ============ -->
-  <div class="sticky-cta">
-    <a class="btn btn--call num" href="tel:+78005504470">📞 Позвонить</a>
-    <a class="btn btn--accent" href="#calc">Рассчитать стоимость</a>
-  </div>
-
-  <script src="js/main.js"></script>
-</body>
-</html>
+@endsection

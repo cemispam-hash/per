@@ -1,0 +1,94 @@
+{
+  "_comment": "Прообраз таблицы routes в PostgreSQL. Каждая запись = одна SEO-страница /avtovoz-{slug}",
+  "routes": [
+    {
+      "slug": "moskva-vladivostok",
+      "city_from": "Москва",
+      "city_to": "Владивосток",
+      "city_from_gen": "Москвы",
+      "city_to_gen": "Владивосток",
+      "distance_km": 9100,
+      "days_min": 10,
+      "days_max": 14,
+      "price_sedan": 95000,
+      "price_crossover": 105000,
+      "price_suv": 115000,
+      "price_pickup": 125000,
+      "price_moto": 45000,
+      "price_closed_sedan": 165000,
+      "waypoints": ["Москва", "Казань", "Екатеринбург", "Новосибирск", "Иркутск", "Чита", "Хабаровск", "Владивосток"],
+      "highways": ["М-7 «Волга»", "Р-242", "Р-254 «Иртыш»", "Р-255 «Сибирь»", "Р-258 «Байкал»", "А-370 «Уссури»"],
+      "is_popular": true
+    },
+    {
+      "slug": "moskva-sankt-peterburg",
+      "city_from": "Москва",
+      "city_to": "Санкт-Петербург",
+      "distance_km": 710,
+      "days_min": 1,
+      "days_max": 2,
+      "price_sedan": 15000,
+      "is_popular": true
+    },
+    {
+      "slug": "moskva-ekaterinburg",
+      "city_from": "Москва",
+      "city_to": "Екатеринбург",
+      "distance_km": 1790,
+      "days_min": 2,
+      "days_max": 4,
+      "price_sedan": 28000,
+      "is_popular": true
+    },
+    {
+      "slug": "moskva-novosibirsk",
+      "city_from": "Москва",
+      "city_to": "Новосибирск",
+      "distance_km": 3300,
+      "days_min": 4,
+      "days_max": 6,
+      "price_sedan": 45000,
+      "is_popular": true
+    },
+    {
+      "slug": "moskva-krasnodar",
+      "city_from": "Москва",
+      "city_to": "Краснодар",
+      "distance_km": 1350,
+      "days_min": 2,
+      "days_max": 3,
+      "price_sedan": 22000,
+      "is_popular": true
+    },
+    {
+      "slug": "moskva-sochi",
+      "city_from": "Москва",
+      "city_to": "Сочи",
+      "distance_km": 1620,
+      "days_min": 2,
+      "days_max": 4,
+      "price_sedan": 27000,
+      "is_popular": true
+    },
+    {
+      "slug": "sankt-peterburg-vladivostok",
+      "city_from": "Санкт-Петербург",
+      "city_to": "Владивосток",
+      "distance_km": 9800,
+      "days_min": 11,
+      "days_max": 15,
+      "price_sedan": 105000,
+      "is_popular": true
+    },
+    {
+      "slug": "moskva-kaliningrad",
+      "city_from": "Москва",
+      "city_to": "Калининград",
+      "distance_km": 1260,
+      "days_min": 3,
+      "days_max": 5,
+      "price_sedan": 35000,
+      "is_popular": true
+    }
+  ]
+}

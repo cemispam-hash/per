@@ -24,7 +24,7 @@ IDLE_SLEEP="${IDLE_SLEEP:-600}"
 # Поэтому круг перекошен в их пользу.
 DISCOVER_CHUNK="${DISCOVER_CHUNK:-20}"
 DETAILS_CHUNK="${DETAILS_CHUNK:-6000}"
-CONTACTS_CHUNK="${CONTACTS_CHUNK:-500}"
+CONTACTS_CHUNK="${CONTACTS_CHUNK:-0}"
 CONTACTS_WORKERS="${CONTACTS_WORKERS:-12}"
 
 say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
@@ -119,10 +119,10 @@ while true; do
         fi
     fi
 
-    # Этап 3: контакты. Идут по своим хостам — поиску и сайтам школ, — с
-    # ФНС за лимит не конкурируют, поэтому ждать конца выписок незачем.
-    # Работа сетевая и почти вся в ожидании, отсюда много потоков.
-    if [ "$left_contacts" != "0" ]; then
+    # Этап 3: контакты. Вынесен в run_contacts.sh и по умолчанию здесь
+    # пропускается: внутри круга он всегда оказывался за партией выписок,
+    # которая идёт часами, и очередь до него не доходила.
+    if [ "$CONTACTS_CHUNK" != "0" ] && [ "$left_contacts" != "0" ]; then
         python3 -u -m ru_schools.cli --db "$DB" --rate 2 \
             contacts --limit "$CONTACTS_CHUNK" --workers "$CONTACTS_WORKERS" >> "$LOG" 2>&1
         progressed=1

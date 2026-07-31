@@ -37,12 +37,11 @@ export_all() {
         --xlsx data/schools.xlsx >> "$LOG" 2>&1
 }
 
+# Выгрузки и снимок остаются на диске; в git их отправляют вручную.
+# Автокоммиты из фонового скрипта GitHub всё равно помечал как Unverified,
+# и после каждой партии данных приходилось переписывать вершину ветки.
 commit_data() {
-    git add -A data/schools.csv data/schools.jsonl data/schools.xlsx data/state.sql.gz 2>/dev/null || return 0
-    git diff --cached --quiet 2>/dev/null && return 0
-    # Личность коммитера берётся из конфигурации репозитория: подмена её
-    # через -c оставляет коммит без подписи.
-    git commit -q -m "Данные: $1" 2>/dev/null && say "зафиксировано в git — $1"
+    say "выгрузка обновлена ($1) — файлы в data/, коммит вручную"
 }
 
 # Снимок базы, чтобы сбор можно было продолжить на чистой машине.

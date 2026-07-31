@@ -270,8 +270,12 @@ _MAINTENANCE_MARKERS = ("Технологические работы", "врем
 
 
 def _check_maintenance(resp) -> None:
-    text = resp.text if resp.headers.get("Content-Type", "").startswith("text/html") else ""
-    if text and any(m in text for m in _MAINTENANCE_MARKERS):
+    if not resp.headers.get("Content-Type", "").startswith("text/html"):
+        return
+    # Заголовок ответа не объявляет кодировку, поэтому resp.text пришёл бы
+    # разобранным как latin-1 и кириллические маркеры не совпали бы ни разу.
+    text = resp.content.decode("utf-8", errors="replace")
+    if any(m in text for m in _MAINTENANCE_MARKERS):
         raise ServiceMaintenance("ФНС проводит технологические работы")
 
 

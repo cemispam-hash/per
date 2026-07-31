@@ -195,6 +195,7 @@ class XmlRiverProvider:
         "obrazovaka.ru", "shkolniku.com", "edu-time.ru", "schoolsdata.ru",
         "russiaschools.ru", "mapdata.ru", "orgpage.ru", "yell.ru", "spr.ru",
         "rusbase", "sbertb", "vipiska-nalog.com", "kontragent",
+        "companium.ru", "outstat.ru", "sparkinterfax", "b2b-in.ru",
     )
     # Признаки сайта образовательной организации.
     SCHOOL_HINTS = (
@@ -208,6 +209,34 @@ class XmlRiverProvider:
         self.user = user
         self.key = key
         self.site = site
+
+    def search_docs(self, query: str, attempts: int = 3):
+        """(ссылки, текст сниппетов). Сниппеты нужны как запасной источник:
+        телефон школы часто виден прямо в выдаче, а её сайт может быть
+        недоступен."""
+        for attempt in range(attempts):
+            resp = self.http.get(
+                self.SEARCH, params={"query": query, "key": self.key, "user": self.user}
+            )
+            if resp.status_code != 200:
+                return [], ""
+            try:
+                root = ET.fromstring(resp.content)
+            except ET.ParseError:
+                return [], ""
+            err = root.find(".//error")
+            if err is None:
+                urls = [d.findtext("url") or "" for d in root.iter("doc")]
+                snippets = " ".join(
+                    (t.text or "") for t in root.iter("passage")
+                ) + " " + " ".join((t.text or "") for t in root.iter("title"))
+                return urls, snippets
+            text = err.text or ""
+            if "перезапрос" in text.lower() and attempt < attempts - 1:
+                continue
+            log.warning("xmlriver: %s", text[:120])
+            return [], ""
+        return [], ""
 
     def search(self, query: str, attempts: int = 3) -> List[str]:
         for attempt in range(attempts):
@@ -256,13 +285,19 @@ class XmlRiverProvider:
         query = " ".join(x for x in (name, _locality_of(address)) if x).strip()
         if not query:
             return None
-        urls = self.search(f"{query} официальный сайт")
+        urls, snippets = self.search_docs(f"{query} официальный сайт")
         for site in self.candidates(urls):
             got = self.site.fetch(inn=inn, website=site, verify_inn=inn)
             if got and (got.email or got.phones):
                 got.website = got.website or site
                 got.source = self.name
                 return got
+
+        # Сайт недоступен или не подтвердился — берём, что видно в выдаче.
+        from_snippet = extract_contacts(snippets)
+        if from_snippet.email or from_snippet.phones:
+            from_snippet.source = "выдача поиска"
+            return from_snippet
         return None
 
 

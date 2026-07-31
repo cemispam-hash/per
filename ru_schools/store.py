@@ -240,6 +240,7 @@ class Store:
             c.email                                        AS email,
             c.phones                                       AS phones,
             c.website                                      AS website,
+            c.source                                       AS contact_source,
             s.headcount                                    AS headcount,
             s.period                                       AS headcount_period,
             d.okved_main                                   AS okved_main,

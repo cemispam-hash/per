@@ -256,7 +256,14 @@ def fetch_contacts(
     done = 0
 
     def work(row):
-        c = contacts_mod.collect(provs, row["inn"], row["kpp"] or "")
+        # Поиску нужны название и адрес: по ним находится сайт школы.
+        c = contacts_mod.collect(
+            provs,
+            row["inn"],
+            row["kpp"] or "",
+            name=row["name_short"] or row["name_full"] or "",
+            address=row["address"] or "",
+        )
         return row["inn"], c
 
     with ThreadPoolExecutor(max_workers=workers) as pool:

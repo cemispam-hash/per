@@ -17,20 +17,46 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from .http_client import HttpClient
 
 log = logging.getLogger(__name__)
+
+# Доступ к xmlriver: из переменных окружения или из файла вне репозитория.
+XMLRIVER_FILE = "data/xmlriver.txt"
+
+
+def xmlriver_credentials(path: str = XMLRIVER_FILE):
+    """(user, key) для поиска — из окружения либо из файла «user:key»."""
+    user = os.environ.get("XMLRIVER_USER", "")
+    key = os.environ.get("XMLRIVER_KEY", "")
+    if not (user and key) and os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if ":" in line:
+                    user, key = line.split(":", 1)
+                    user, key = user.strip(), key.strip()
+                break
+    return user, key
+
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,10}")
 PHONE_RE = re.compile(
     r"(?:\+7|8)[\s\-]?\(?\d{3,5}\)?[\s\-]?\d{1,3}[\s\-]?\d{2}[\s\-]?\d{2}"
 )
 _JUNK_EMAIL = re.compile(
-    r"(example|sentry|noreply|no-reply|yandex\.ru/support|@sentry|\.png|\.jpg|\.webp)", re.I
+    r"(example|sentry|noreply|no-reply|yandex\.ru/support|@sentry|\.png|\.jpg|\.webp"
+    r"|\.js$|\.css$|\.svg$|\.min$|@\d+\.\d|@2x|domain\.|mail\.example|your@|@site\.)",
+    re.I,
 )
 
 
@@ -140,6 +166,122 @@ class SabyProvider:
         return c if c else None
 
 
+class XmlRiverProvider:
+    """Поиск официального сайта школы и снятие контактов с него.
+
+    ЕГРЮЛ контактов не содержит, зато школа обязана публиковать телефон и
+    e-mail у себя на сайте (ст. 29 ФЗ-273, ПП РФ № 1802). Сайт ищется через
+    xmlriver.com — прослойку к выдаче Яндекса и Google.
+    """
+
+    name = "сайт школы (поиск)"
+    SEARCH = "https://xmlriver.com/search/xml"
+
+    # Справочники и агрегаторы: контактов школы там либо нет, либо они
+    # перепечатаны с ошибками — нужен именно сайт самой школы.
+    AGGREGATORS = (
+        "2gis.ru", "yandex.", "google.", "rusprofile.ru", "list-org.com",
+        "checko.ru", "audit-it.ru", "rbc.ru", "tochka.com", "tbank.ru",
+        "tinkoff.ru", "sbis.ru", "saby.ru", "zachestnyibiznes.ru", "zanad.ru",
+        "orgs.biz", "vk.com", "ok.ru", "facebook.com", "instagram.com",
+        "wikipedia.org", "schoolotzyv.ru", "sudact.ru", "synapsenet.ru",
+        "bus.gov.ru", "zakupki.gov.ru", "nalog.ru", "e-ecolog.ru", "spark",
+        "kartoteka.ru", "seldon", "avito.ru", "youtube.com", "prodoctorov",
+        "otzovik", "flamp.ru", "zoon.ru", "bizly.ru", "companies.rbc.ru",
+        # Педагогические порталы и каталоги: страницы школ там есть,
+        # а контакты — чужие либо редакционные.
+        "edu2you.ru", "nsportal.ru", "infourok.ru", "uchi.ru", "maam.ru",
+        "multiurok.ru", "videouroki.net", "prodlenka.org", "znanio.ru",
+        "obrazovaka.ru", "shkolniku.com", "edu-time.ru", "schoolsdata.ru",
+        "russiaschools.ru", "mapdata.ru", "orgpage.ru", "yell.ru", "spr.ru",
+        "rusbase", "sbertb", "vipiska-nalog.com", "kontragent",
+    )
+    # Признаки сайта образовательной организации.
+    SCHOOL_HINTS = (
+        "shkola", "school", "shkol", "mbou", "mkou", "maou", "mou", "gimn",
+        "licey", "lyceum", "sch", "edu", "obr", "internat", "kadet",
+        "школ", "мбоу", "гимназ", "лицей",
+    )
+
+    def __init__(self, http: HttpClient, user: str, key: str, site: "WebsiteProvider"):
+        self.http = http
+        self.user = user
+        self.key = key
+        self.site = site
+
+    def search(self, query: str, attempts: int = 3) -> List[str]:
+        for attempt in range(attempts):
+            resp = self.http.get(
+                self.SEARCH, params={"query": query, "key": self.key, "user": self.user}
+            )
+            if resp.status_code != 200:
+                return []
+            try:
+                root = ET.fromstring(resp.content)
+            except ET.ParseError:
+                return []
+            err = root.find(".//error")
+            if err is None:
+                return [d.findtext("url") or "" for d in root.iter("doc")]
+            text = (err.text or "")
+            # «Выполните перезапрос» — поисковик не ответил, это лечится повтором.
+            if "перезапрос" in text.lower() and attempt < attempts - 1:
+                continue
+            log.warning("xmlriver: %s", text[:120])
+            return []
+        return []
+
+    @classmethod
+    def candidates(cls, urls: List[str], limit: int = 3) -> List[str]:
+        """Сайты-кандидаты: агрегаторы отброшены, похожие на школьные — вперёд."""
+        hosts, seen = [], set()
+        for url in urls:
+            host = _host(url).lower()
+            if not host or host in seen or any(a in host for a in cls.AGGREGATORS):
+                continue
+            seen.add(host)
+            hosts.append(host)
+        # «Госвеб» — государственная платформа сайтов школ: если школа там,
+        # это её официальный сайт, и структура разделов у него стандартная.
+        hosts.sort(
+            key=lambda h: (
+                0 if "gosweb.gosuslugi.ru" in h
+                else 1 if any(x in h for x in cls.SCHOOL_HINTS)
+                else 2
+            )
+        )
+        return [f"https://{h}" for h in hosts[:limit]]
+
+    def fetch(self, inn: str, name: str = "", address: str = "", **_) -> Optional[Contact]:
+        query = " ".join(x for x in (name, _locality_of(address)) if x).strip()
+        if not query:
+            return None
+        urls = self.search(f"{query} официальный сайт")
+        for site in self.candidates(urls):
+            got = self.site.fetch(inn=inn, website=site, verify_inn=inn)
+            if got and (got.email or got.phones):
+                got.website = got.website or site
+                got.source = self.name
+                return got
+        return None
+
+
+def _locality_of(address: str) -> str:
+    """Город или населённый пункт из адреса — для поискового запроса."""
+    for part in (address or "").split(","):
+        part = part.strip()
+        if re.match(r"^(Г\.|ГОРОД|С\.|СЕЛО|П\.|ПГТ|СТ-ЦА|АУЛ|Х\.|Д\.\s*[А-ЯЁ])", part, re.I):
+            return part
+    return ""
+
+
+def _host(url: str) -> str:
+    try:
+        return urlparse(url).hostname or ""
+    except ValueError:
+        return ""
+
+
 class OsmProvider:
     """OpenStreetMap через Overpass API (лицензия ODbL)."""
 
@@ -184,42 +326,104 @@ class WebsiteProvider:
     """Официальный сайт школы: раздел «Сведения об образовательной организации»."""
 
     name = "сайт школы"
-    PAGES = ("/sveden/common", "/sveden/", "/contacts", "/kontakty", "/")
+    # Раздел «Основные сведения» обязателен и содержит ИНН — по нему сайт и
+    # подтверждается. Порядок важен: сначала главная, она есть всегда, и на
+    # ней же обычно висят телефон и почта самой школы.
+    PAGES = (
+        "/",
+        "/svedeniya-ob-obrazovatelnoy-organizatsii/osnovnye-svedeniya",
+        "/sveden/common",
+        "/contacts",
+    )
 
     def __init__(self, http: HttpClient):
-        self.http = http
+        """Сайтам школ нужен свой клиент: их тысячи, часть не отвечает вовсе,
+        и ждать каждый по минуте с пятью повторами, как ФНС, недопустимо."""
+        self.http = HttpClient(rate=4.0, timeout=8, retries=1)
 
-    def fetch(self, inn: str, website: str = "", **_) -> Optional[Contact]:
+    def _page(self, url: str) -> Optional[str]:
+        try:
+            resp = self.http.get(url, allow_redirects=True)
+        except RuntimeError:
+            return None
+        if resp.status_code != 200:
+            return None
+        if "text/html" not in resp.headers.get("Content-Type", ""):
+            return None
+        return resp.content.decode(resp.encoding or "utf-8", errors="replace")
+
+    def fetch(
+        self, inn: str, website: str = "", verify_inn: str = "", **_
+    ) -> Optional[Contact]:
+        """Контакты с сайта школы.
+
+        `verify_inn` включает проверку принадлежности: сайт засчитывается,
+        только если ИНН организации найден на нём. Школы публикуют его в
+        разделе «Основные сведения», а справочники и чужие сайты — нет.
+        """
         if not website:
             return None
         base = website.rstrip("/")
-        for path in self.PAGES:
-            try:
-                resp = self.http.get(base + path, allow_redirects=True)
-            except RuntimeError:
-                continue
-            if resp.status_code != 200 or "text/html" not in resp.headers.get("Content-Type", ""):
-                continue
-            c = extract_contacts(resp.text)
-            if c.email or c.phones:
-                c.website = base
-                c.source = self.name
-                return c
-        return None
+
+        # Мёртвый хост отсеивается одним запросом, а не девятью.
+        home = self._page(base + "/")
+        if home is None:
+            return None
+
+        pages = [home]
+        confirmed = not verify_inn or verify_inn in re.sub(r"\D", "", home)
+        found = extract_contacts(home)
+
+        if not confirmed or not (found.email or found.phones):
+            for path in self.PAGES[1:]:
+                text = self._page(base + path)
+                if text is None:
+                    continue
+                pages.append(text)
+                if verify_inn and verify_inn in re.sub(r"\D", "", text):
+                    confirmed = True
+                more = extract_contacts(text)
+                found.email = found.email or more.email
+                found.phones = found.phones or more.phones
+                if confirmed and (found.email or found.phones):
+                    break
+
+        if not confirmed or not (found.email or found.phones):
+            return None
+        found.website = base
+        found.source = self.name
+        return found
 
 
 def build_providers(http: HttpClient, names: Optional[List[str]] = None) -> List:
-    available = {
+    simple = {
         "busgov": BusGovProvider,
         "saby": SabyProvider,
         "osm": OsmProvider,
         "site": WebsiteProvider,
     }
-    names = names or ["busgov", "saby", "osm"]
-    return [available[n](http) for n in names if n in available]
+    names = names or ["busgov", "search", "osm"]
+    out = []
+    for n in names:
+        if n in simple:
+            out.append(simple[n](http))
+        elif n == "search":
+            user, key = xmlriver_credentials()
+            if not (user and key):
+                log.warning("поиск сайтов отключён: не задан ключ xmlriver")
+                continue
+            out.append(XmlRiverProvider(http, user, key, WebsiteProvider(http)))
+    return out
 
 
-def collect(providers: List, inn: str, kpp: str = "", website: str = "") -> Contact:
+def collect(
+    providers: List,
+    inn: str,
+    kpp: str = "",
+    website: str = "",
+    name: str = "",
+    address: str = "",
+) -> Contact:
     """Первый непустой ответ; недоступный источник молча пропускается.
 
     Если по дороге нашёлся адрес официального сайта, он дополнительно
@@ -230,7 +434,9 @@ def collect(providers: List, inn: str, kpp: str = "", website: str = "") -> Cont
     site_prov = next((p for p in providers if isinstance(p, WebsiteProvider)), None)
     for prov in providers:
         try:
-            got = prov.fetch(inn=inn, kpp=kpp, website=website)
+            got = prov.fetch(
+                inn=inn, kpp=kpp, website=website, name=name, address=address
+            )
         except Exception as exc:  # источник недоступен — идём дальше
             log.debug("%s недоступен для ИНН %s: %s", prov.name, inn, exc)
             continue

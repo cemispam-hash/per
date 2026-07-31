@@ -203,7 +203,7 @@ class Store:
         return self.conn.execute(sql, (self.MAX_ATTEMPTS,)).fetchall()
 
     def pending_contacts(self, limit: Optional[int] = None) -> List[sqlite3.Row]:
-        sql = """SELECT d.inn, d.kpp, d.name_short, d.city, d.region
+        sql = """SELECT d.inn, d.kpp, d.name_short, d.name_full, d.address, d.city, d.region
                  FROM details d
                  LEFT JOIN contacts c ON c.inn = d.inn
                  LEFT JOIN (SELECT inn, COUNT(*) n FROM failures

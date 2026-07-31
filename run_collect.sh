@@ -24,6 +24,8 @@ IDLE_SLEEP="${IDLE_SLEEP:-600}"
 # Поэтому круг перекошен в их пользу.
 DISCOVER_CHUNK="${DISCOVER_CHUNK:-20}"
 DETAILS_CHUNK="${DETAILS_CHUNK:-6000}"
+CONTACTS_CHUNK="${CONTACTS_CHUNK:-500}"
+CONTACTS_WORKERS="${CONTACTS_WORKERS:-12}"
 
 say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 todo() { python3 -m ru_schools.cli --db "$DB" todo 2>/dev/null || echo "-1 -1 -1"; }
@@ -117,11 +119,12 @@ while true; do
         fi
     fi
 
-    # Этап 3: контакты — только когда перечень и выписки закончены,
-    # чтобы не мешать запросам к ЕГРЮЛ.
-    if [ "$left_discover" = "0" ] && [ "$left_details" = "0" ] && [ "$left_contacts" != "0" ]; then
-        python3 -u -m ru_schools.cli --db "$DB" --rate 1.5 \
-            contacts --limit 2000 --workers "$WORKERS" >> "$LOG" 2>&1
+    # Этап 3: контакты. Идут по своим хостам — поиску и сайтам школ, — с
+    # ФНС за лимит не конкурируют, поэтому ждать конца выписок незачем.
+    # Работа сетевая и почти вся в ожидании, отсюда много потоков.
+    if [ "$left_contacts" != "0" ]; then
+        python3 -u -m ru_schools.cli --db "$DB" --rate 2 \
+            contacts --limit "$CONTACTS_CHUNK" --workers "$CONTACTS_WORKERS" >> "$LOG" 2>&1
         progressed=1
     fi
 

@@ -17,7 +17,11 @@ LOG="${LOG:-data/collect.log}"
 SSHR="${SSHR:-data/raw/sshr2019.zip}"
 DONE_MARKER="${DONE_MARKER:-data/COLLECT_DONE}"
 IDLE_SLEEP="${IDLE_SLEEP:-600}"
-DISCOVER_CHUNK="${DISCOVER_CHUNK:-40}"
+# Выписки — узкое место по объёму: на каждую организацию три
+# запроса, тогда как весь поиск укладывается в тысячи страниц.
+# Поэтому круг перекошен в их пользу.
+DISCOVER_CHUNK="${DISCOVER_CHUNK:-20}"
+DETAILS_CHUNK="${DETAILS_CHUNK:-6000}"
 
 say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 todo() { python3 -m ru_schools.cli --db "$DB" todo 2>/dev/null || echo "-1 -1 -1"; }
@@ -98,7 +102,7 @@ while true; do
     if [ "$left_details" != "0" ]; then
         before=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
         python3 -u -m ru_schools.cli --db "$DB" --rate "$RATE" \
-            details --limit 2000 --workers "$WORKERS" >> "$LOG" 2>&1
+            details --limit "$DETAILS_CHUNK" --workers "$WORKERS" >> "$LOG" 2>&1
         after=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from details').fetchone()[0])")
         say "выписок разобрано: $after (+$((after - before)))"
         [ "$after" != "$before" ] && progressed=1

@@ -12,7 +12,9 @@ set -u
 cd "$(dirname "$0")"
 DB="${DB:-data/schools.db}"
 RATE="${RATE:-0.7}"
-WORKERS="${WORKERS:-2}"
+# Пять потоков дают около восемнадцати выписок в минуту против
+# тринадцати на двух; дальше упирается в лимиты самой ФНС.
+WORKERS="${WORKERS:-5}"
 LOG="${LOG:-data/collect.log}"
 SSHR="${SSHR:-data/raw/sshr2019.zip}"
 DONE_MARKER="${DONE_MARKER:-data/COLLECT_DONE}"

@@ -39,7 +39,9 @@ commit_data() {
 # Снимок базы, чтобы сбор можно было продолжить на чистой машине.
 # Файл тяжёлый, поэтому обновляется редко — раз в COMMIT_EVERY выписок.
 COMMIT_EVERY="${COMMIT_EVERY:-10000}"
+SNAPSHOT_ORGS="${SNAPSHOT_ORGS:-10000}"
 last_commit=0
+last_snapshot_orgs=0
 snapshot() {
     python3 - "$DB" <<'PY'
 import gzip, sqlite3, sys
@@ -71,6 +73,15 @@ while true; do
     fi
 
     progressed=0
+
+    # Снимок по мере роста перечня: до первых выписок он иначе не делался
+    # бы вовсе, и потеря контейнера стоила бы всего собранного поиска.
+    orgs=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from orgs').fetchone()[0])")
+    if [ $((orgs - last_snapshot_orgs)) -ge "$SNAPSHOT_ORGS" ]; then
+        last_snapshot_orgs=$orgs
+        snapshot
+        commit_data "перечень организаций — $orgs"
+    fi
 
     # Этап 1: перечень школ.
     if [ "$left_discover" != "0" ]; then

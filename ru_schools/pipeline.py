@@ -13,12 +13,16 @@ from typing import Iterable, List, Optional
 from . import contacts as contacts_mod
 from . import sshr
 from .egrul import SCHOOL_QUERIES, CaptchaRequired, EgrulClient, ServiceMaintenance
-from .http_client import HttpClient
+from .http_client import HttpClient, RateLimiter
 from .regions import ALL_REGION_CODES, region_name
 from .store import Store
 from .vypiska import parse_pdf
 
 log = logging.getLogger(__name__)
+
+# Столько ответов «сервис недоступен» подряд считаем настоящими
+# технологическими работами, а не разовым отказом под нагрузкой.
+MAINTENANCE_LIMIT = 15
 
 
 class Budget:
@@ -151,7 +155,17 @@ def fetch_details(
         ]
         workers = max(workers, len(clients))
     else:
-        clients = [EgrulClient(http, vyp_http=HttpClient(rate=vyp_rate))]
+        # По клиенту на поток: сессия у каждого своя, а лимит частоты общий.
+        # С одной сессией на всех сброс после отказа выбивал cookie у соседа,
+        # и тот получал от ФНС страницу «сервис недоступен».
+        vyp_limiter = RateLimiter(1.0 / vyp_rate if vyp_rate > 0 else 0.0)
+        clients = [
+            EgrulClient(
+                HttpClient(rate=0, limiter=http.limiter),
+                vyp_http=HttpClient(rate=0, limiter=vyp_limiter),
+            )
+            for _ in range(max(1, workers))
+        ]
     pending = store.pending_details(limit)
     if not pending:
         return 0
@@ -172,7 +186,7 @@ def fetch_details(
             is_school = False
         return inn, v, is_school
 
-    maintenance = False
+    maintenance = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(work, (i, r)): r["inn"] for i, r in enumerate(pending)
@@ -186,18 +200,23 @@ def fetch_details(
                 # по конкретной организации, отметку ставить нельзя.
                 continue
             except ServiceMaintenance:
-                if not maintenance:
-                    maintenance = True
+                # Разовый ответ «сервис недоступен» ещё не повод бросать
+                # партию: этап останавливаем, только если недоступность
+                # держится подряд и ни одна выписка между ними не прошла.
+                maintenance += 1
+                if maintenance >= MAINTENANCE_LIMIT:
                     log.warning(
-                        "ЕГРЮЛ на технологических работах — выписки временно "
-                        "недоступны, этап будет продолжен позже"
+                        "ЕГРЮЛ на технологических работах (%s отказов подряд) "
+                        "— выписки временно недоступны, этап продолжится позже",
+                        maintenance,
                     )
-                for pending_fut in futures:
-                    pending_fut.cancel()
+                    for pending_fut in futures:
+                        pending_fut.cancel()
                 continue
             except Exception as exc:
                 store.add_failure(inn, "details", str(exc))
                 continue
+            maintenance = 0  # выписка прошла — недоступности нет
             store.add_details(inn, v, is_school)
             done += 1
             if done % 100 == 0:

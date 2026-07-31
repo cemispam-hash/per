@@ -79,13 +79,17 @@ class HttpClient:
         user_agent: str = DEFAULT_UA,
         verify: Optional[str] = None,
         proxy: Optional[str] = None,
+        limiter: Optional[RateLimiter] = None,
     ):
         """rate — запросов в секунду (на клиента).
 
         `proxy` — адрес вида http://логин:пароль@хост:порт. Задан — весь
         трафик клиента идёт через него, минуя настройки окружения.
+
+        `limiter` позволяет нескольким клиентам делить один лимит частоты:
+        сессии у них при этом разные, и сброс одной не задевает остальные.
         """
-        self.limiter = RateLimiter(1.0 / rate if rate > 0 else 0.0)
+        self.limiter = limiter or RateLimiter(1.0 / rate if rate > 0 else 0.0)
         self._lock = threading.Lock()
         self.timeout = timeout
         self.retries = retries

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional
@@ -105,6 +106,9 @@ class EgrulClient:
         self.http = http
         self.vyp = vyp_http or http
         self._primed = False
+        # Праймингом занимается ровно один поток: остальные ждут его,
+        # иначе уходят в запрос по ещё не полученной cookie.
+        self._prime_lock = threading.Lock()
         # После сброса сессии клиентом нужно заново получить cookie.
         http.on_throttle = self._invalidate
         if self.vyp is not http:
@@ -120,10 +124,18 @@ class EgrulClient:
             self._primed = False
 
     def _prime(self) -> None:
-        """Получить сессионные cookie перед первым запросом."""
-        if not self._primed:
-            self._primed = True
+        """Получить сессионные cookie перед первым запросом.
+
+        Клиент выписок — отдельная сессия, и cookie ему нужна своя: без неё
+        ФНС отвечает на запрос выписки страницей «сервис недоступен».
+        """
+        with self._prime_lock:
+            if self._primed:
+                return
             self.http.get(f"{BASE}/index.html", allow_redirects=True)
+            if self.vyp is not self.http:
+                self.vyp.get(f"{BASE}/index.html", allow_redirects=True)
+            self._primed = True
 
     def search_page(self, query: str, region: str = "", page: int = 1) -> List[EgrulRow]:
         """Одна страница результатов поиска (до 20 записей)."""
@@ -210,18 +222,30 @@ class EgrulClient:
         сохранённый токен со временем перестаёт приниматься.
         """
         last = None
+        refreshed = False
         for attempt in range(attempts):
             try:
                 return self._vypiska_once(token)
-            except (CaptchaRequired, ServiceMaintenance):
+            except CaptchaRequired:
                 raise
-            except RuntimeError as exc:
+            except RuntimeError as exc:  # включая ServiceMaintenance
                 last = exc
-                time.sleep(2.0 * (attempt + 1))
-                if inn:
-                    rows = self.search_page(inn)
+                # Сохранённый токен со временем протухает, и на просроченный
+                # ФНС отвечает то пятисотой, то своей страницей «сервис
+                # временно недоступен» — неотличимо от настоящих работ.
+                # Поэтому сначала обновляем токен и только потом верим отказу.
+                if inn and not refreshed:
+                    refreshed = True
+                    try:
+                        rows = self.search_page(inn)
+                    except RuntimeError:
+                        rows = []
                     if rows and rows[0].token:
                         token = rows[0].token
+                        continue
+                if isinstance(exc, ServiceMaintenance):
+                    raise
+                time.sleep(2.0 * (attempt + 1))
         raise RuntimeError(f"выписка недоступна: {last}")
 
     def _vypiska_once(self, token: str) -> bytes:

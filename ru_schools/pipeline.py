@@ -254,6 +254,7 @@ def fetch_contacts(
     pending = store.pending_contacts(limit)
     log.info("организаций без контактов: %s", len(pending))
     done = 0
+    unavailable = 0
 
     def work(row):
         # Поиску нужны название и адрес: по ним находится сайт школы.
@@ -272,6 +273,10 @@ def fetch_contacts(
             inn = futures[fut]
             try:
                 inn, c = fut.result()
+            except contacts_mod.SearchUnavailable:
+                # Поиск занят — школу не помечаем, вернёмся к ней позже.
+                unavailable += 1
+                continue
             except Exception as exc:
                 store.add_failure(inn, "contacts", str(exc))
                 continue
@@ -279,4 +284,8 @@ def fetch_contacts(
             done += 1
             if done % 100 == 0:
                 log.info("контакты: обработано %s / %s", done, len(pending))
+    if unavailable:
+        log.warning(
+            "поиск был занят для %s школ — они остались в очереди", unavailable
+        )
     return done

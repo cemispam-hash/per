@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -47,6 +48,14 @@ def xmlriver_credentials(path: str = XMLRIVER_FILE):
                     user, key = user.strip(), key.strip()
                 break
     return user, key
+
+
+class SearchUnavailable(RuntimeError):
+    """Поиск отказал по своим причинам — школа тут ни при чём.
+
+    Такой отказ нельзя записывать как «контактов нет»: школу нужно
+    попробовать снова, когда каналы поиска освободятся.
+    """
 
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,10}")
@@ -232,11 +241,18 @@ class XmlRiverProvider:
                 ) + " " + " ".join((t.text or "") for t in root.iter("title"))
                 return urls, snippets
             text = err.text or ""
-            if "перезапрос" in text.lower() and attempt < attempts - 1:
+            low = text.lower()
+            # «Выполните перезапрос» и «нет свободных каналов» — это про
+            # состояние самого поиска, а не про школу.
+            transient = "перезапрос" in low or "свободных каналов" in low
+            if transient and attempt < attempts - 1:
+                time.sleep(5.0 * (attempt + 1))
                 continue
             log.warning("xmlriver: %s", text[:120])
+            if transient:
+                raise SearchUnavailable(text[:120])
             return [], ""
-        return [], ""
+        raise SearchUnavailable("поиск не ответил")
 
     def search(self, query: str, attempts: int = 3) -> List[str]:
         for attempt in range(attempts):
@@ -487,6 +503,8 @@ def collect(
             got = prov.fetch(
                 inn=inn, kpp=kpp, website=website, name=name, address=address
             )
+        except SearchUnavailable:
+            raise
         except Exception as exc:  # источник недоступен — идём дальше
             log.debug("%s недоступен для ИНН %s: %s", prov.name, inn, exc)
             continue

@@ -48,8 +48,13 @@ commit_data() {
 # Файл тяжёлый, поэтому обновляется редко — раз в COMMIT_EVERY выписок.
 COMMIT_EVERY="${COMMIT_EVERY:-10000}"
 SNAPSHOT_ORGS="${SNAPSHOT_ORGS:-10000}"
+# Снимок по времени — главная защита от отката контейнера: без него между
+# порогами по числу записей терялись часы работы, включая контакты, которые
+# в пороги не входят вовсе.
+SNAPSHOT_EVERY_SEC="${SNAPSHOT_EVERY_SEC:-1800}"
 last_commit=0
 last_snapshot_orgs=0
+last_snapshot_at=0
 snapshot() {
     python3 - "$DB" <<'PY'
 import gzip, sqlite3, sys
@@ -82,11 +87,13 @@ while true; do
 
     progressed=0
 
-    # Снимок по мере роста перечня: до первых выписок он иначе не делался
-    # бы вовсе, и потеря контейнера стоила бы всего собранного поиска.
+    # Снимок: по мере роста перечня и просто по времени.
     orgs=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute('select count(*) from orgs').fetchone()[0])")
-    if [ $((orgs - last_snapshot_orgs)) -ge "$SNAPSHOT_ORGS" ]; then
+    now=$(date +%s)
+    if [ $((orgs - last_snapshot_orgs)) -ge "$SNAPSHOT_ORGS" ] \
+       || [ $((now - last_snapshot_at)) -ge "$SNAPSHOT_EVERY_SEC" ]; then
         last_snapshot_orgs=$orgs
+        last_snapshot_at=$now
         snapshot
         commit_data "перечень организаций — $orgs"
     fi

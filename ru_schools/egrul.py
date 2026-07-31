@@ -253,6 +253,9 @@ class EgrulClient:
         r = self.vyp.get(
             f"{BASE}/vyp-request/{token}",
             headers={"X-Requested-With": "XMLHttpRequest", "Referer": f"{BASE}/index.html"},
+            # Отказ на этом шаге почти всегда означает просроченный токен —
+            # повторять его бессмысленно, надо идти обновлять.
+            retries=1,
         )
         payload = _json_or_none(r)
         if not payload or "t" not in payload:

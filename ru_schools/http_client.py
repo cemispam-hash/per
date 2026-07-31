@@ -139,8 +139,12 @@ class HttpClient:
                 self._resetting = False
 
     def request(self, method: str, url: str, **kw) -> requests.Response:
+        # Отдельным запросам повторы ни к чему: например, просроченный токен
+        # выписки даёт 500 сколько его ни повторяй, а вызывающий код умеет
+        # обновить токен — но только если получит отказ сразу.
+        retries = kw.pop("retries", None) or self.retries
         last_exc = None
-        for attempt in range(self.retries):
+        for attempt in range(retries):
             self.limiter.wait()
             try:
                 resp = self.session.request(

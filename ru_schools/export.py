@@ -19,8 +19,7 @@ COLUMNS = [
     ("postal_code", "Индекс"),
     ("region", "Регион (область)"),
     ("district", "Район"),
-    ("city", "Город"),
-    ("settlement", "Населённый пункт"),
+    ("locality", "Город / населённый пункт"),
     ("email", "E-mail"),
     ("phones", "Телефоны"),
     ("website", "Сайт"),
@@ -34,9 +33,20 @@ COLUMNS = [
 ]
 
 
+def _locality(row) -> str:
+    """Город для городских школ, населённый пункт — для сельских."""
+    keys = row.keys()
+    city = (row["city"] if "city" in keys else "") or ""
+    settlement = (row["settlement"] if "settlement" in keys else "") or ""
+    return city or settlement
+
+
 def _row_dict(row) -> dict:
     out = {}
     for key, title in COLUMNS:
+        if key == "locality":
+            out[title] = _locality(row)
+            continue
         val = row[key] if key in row.keys() else None
         if key == "phones" and val:
             try:
@@ -64,6 +74,7 @@ def to_jsonl(store: Store, path: str, schools_only: bool = True) -> int:
     with open(path, "w", encoding="utf-8") as fh:
         for r in rows:
             d = dict(r)
+            d["locality"] = _locality(r)
             if d.get("phones"):
                 try:
                     d["phones"] = json.loads(d["phones"])

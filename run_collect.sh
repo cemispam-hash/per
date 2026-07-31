@@ -40,8 +40,9 @@ export_all() {
 commit_data() {
     git add -A data/schools.csv data/schools.jsonl data/schools.xlsx data/state.sql.gz 2>/dev/null || return 0
     git diff --cached --quiet 2>/dev/null && return 0
-    git -c user.email=noreply@anthropic.com -c user.name=Claude \
-        commit -q -m "Данные: $1" 2>/dev/null && say "зафиксировано в git — $1"
+    # Личность коммитера берётся из конфигурации репозитория: подмена её
+    # через -c оставляет коммит без подписи.
+    git commit -q -m "Данные: $1" 2>/dev/null && say "зафиксировано в git — $1"
 }
 
 # Снимок базы, чтобы сбор можно было продолжить на чистой машине.

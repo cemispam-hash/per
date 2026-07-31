@@ -111,7 +111,13 @@ class EgrulClient:
             self.vyp.on_throttle = self._invalidate
 
     def _invalidate(self) -> None:
+        """После сброса сессии сразу берём новую cookie, а не ждём следующего
+        обращения: повторная попытка уходит уже по свежему соединению."""
         self._primed = False
+        try:
+            self._prime()
+        except Exception:  # источник сейчас недоступен — разберёмся выше
+            self._primed = False
 
     def _prime(self) -> None:
         """Получить сессионные cookie перед первым запросом."""

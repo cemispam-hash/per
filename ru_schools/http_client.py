@@ -112,13 +112,27 @@ class HttpClient:
         self.verify = verify if verify else True
         # Вызывается, когда сервис начал троттлить и сессия сброшена.
         self.on_throttle = None
+        self._resetting = False
 
     def reset_session(self) -> None:
-        """Сбрасывает cookie: ЕГРЮЛ ограничивает число запросов на сессию."""
+        """Начинает общение с источником заново после отказа по частоте.
+
+        Сбрасываются и cookie, и пул соединений: свежая сессия с новым
+        TCP-соединением получает ответ там, где переиспользованное
+        соединение продолжает получать 405, даже когда пауза выдержана.
+        """
         with self._lock:
+            if self._resetting:
+                return
+            self._resetting = True
+        try:
             self.session.cookies.clear()
-        if self.on_throttle:
-            self.on_throttle()
+            self.session.close()
+            if self.on_throttle:
+                self.on_throttle()
+        finally:
+            with self._lock:
+                self._resetting = False
 
     def request(self, method: str, url: str, **kw) -> requests.Response:
         last_exc = None

@@ -341,6 +341,20 @@ class WebsiteProvider:
         и ждать каждый по минуте с пятью повторами, как ФНС, недопустимо."""
         self.http = HttpClient(rate=4.0, timeout=8, retries=1)
 
+    # Страницы школьных сайтов бывают на мегабайты; регулярным выражениям
+    # столько не нужно, а время они съедают целиком.
+    MAX_PAGE = 400_000
+
+    @staticmethod
+    def _has_inn(text: str, inn: str) -> bool:
+        """ИНН на странице. Быстрая проверка подстрокой, и только если она
+        не сработала — разбор с разделителями внутри номера."""
+        if not inn:
+            return False
+        if inn in text:
+            return True
+        return bool(re.search(r"\D".join(inn), text))
+
     def _page(self, url: str) -> Optional[str]:
         try:
             resp = self.http.get(url, allow_redirects=True)
@@ -350,7 +364,8 @@ class WebsiteProvider:
             return None
         if "text/html" not in resp.headers.get("Content-Type", ""):
             return None
-        return resp.content.decode(resp.encoding or "utf-8", errors="replace")
+        text = resp.content.decode(resp.encoding or "utf-8", errors="replace")
+        return text[: self.MAX_PAGE]
 
     def fetch(
         self, inn: str, website: str = "", verify_inn: str = "", **_
@@ -371,7 +386,7 @@ class WebsiteProvider:
             return None
 
         pages = [home]
-        confirmed = not verify_inn or verify_inn in re.sub(r"\D", "", home)
+        confirmed = not verify_inn or self._has_inn(home, verify_inn)
         found = extract_contacts(home)
 
         if not confirmed or not (found.email or found.phones):
@@ -380,7 +395,7 @@ class WebsiteProvider:
                 if text is None:
                     continue
                 pages.append(text)
-                if verify_inn and verify_inn in re.sub(r"\D", "", text):
+                if verify_inn and self._has_inn(text, verify_inn):
                     confirmed = True
                 more = extract_contacts(text)
                 found.email = found.email or more.email

@@ -7,7 +7,7 @@ import os
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Iterable, List, Optional
 
 from . import contacts as contacts_mod
@@ -181,6 +181,10 @@ def fetch_details(
             inn = futures[fut]
             try:
                 inn, v, is_school = fut.result()
+            except CancelledError:
+                # Задача снята нами же при остановке этапа — это не отказ
+                # по конкретной организации, отметку ставить нельзя.
+                continue
             except ServiceMaintenance:
                 if not maintenance:
                     maintenance = True

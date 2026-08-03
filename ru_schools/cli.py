@@ -88,6 +88,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("restore", help="восстановить базу из снимка data/state.sql.gz")
     r.add_argument("--snapshot", default="data/state.sql.gz")
+    # Полный снимок тяжёлый и обновляется редко; свежие контакты приезжают
+    # отдельным лёгким файлом и накладываются поверх него.
+    r.add_argument("--overlay", default="data/contacts.sql.gz")
     return p
 
 
@@ -113,14 +116,21 @@ def main(argv=None) -> int:
 
     if args.cmd == "restore":
         import gzip
+        import os
         import sqlite3
 
         conn = sqlite3.connect(args.db)
         with gzip.open(args.snapshot, "rt", encoding="utf-8") as fh:
             conn.executescript(fh.read())
         conn.commit()
-        conn.close()
         print(f"база {args.db} восстановлена из {args.snapshot}")
+        if args.overlay and os.path.exists(args.overlay):
+            with gzip.open(args.overlay, "rt", encoding="utf-8") as fh:
+                conn.executescript(fh.read())
+            conn.commit()
+            got = conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0]
+            print(f"контакты дополнены из {args.overlay}: всего {got}")
+        conn.close()
         return 0
 
     if args.cmd == "regions":

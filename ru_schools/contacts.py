@@ -221,7 +221,7 @@ class XmlRiverProvider:
         self.key = key
         self.site = site
 
-    def search_docs(self, query: str, attempts: int = 3):
+    def search_docs(self, query: str, attempts: int = 6):
         """(ссылки, текст сниппетов). Сниппеты нужны как запасной источник:
         телефон школы часто виден прямо в выдаче, а её сайт может быть
         недоступен."""
@@ -251,7 +251,12 @@ class XmlRiverProvider:
             # получала отметку «контактов нет», хотя поиск по ней не работал.
             transient = "перезапрос" in low or "каналов" in low or "каналы" in low
             if transient and attempt < attempts - 1:
-                time.sleep(5.0 * (attempt + 1))
+                # «Перезапрос» — поисковик не ответил сам; такие отказы не
+                # тарифицируются и лечатся немедленным повтором, их бывает
+                # две трети подряд. Занятые каналы освобождаются медленнее,
+                # тут ожидание должно расти.
+                busy = "канал" in low
+                time.sleep((5.0 * (attempt + 1)) if busy else 1.5)
                 continue
             log.warning("xmlriver: %s", text[:120])
             if transient:

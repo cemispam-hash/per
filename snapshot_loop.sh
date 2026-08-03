@@ -78,7 +78,12 @@ PY
 
     got=$(python3 -c "import sqlite3;print(sqlite3.connect('$DB').execute(\"select count(*) from contacts\").fetchone()[0])" 2>/dev/null || echo "?")
 
-    git add -A "$OVERLAY"
+    # Свой лог цикл теряет вместе с диском при откате, поэтому короткий след
+    # едет в git вместе с данными: иначе непонятно, почему снимков за час
+    # оказалось меньше, чем кругов.
+    tail -40 "$LOG" > data/snapshot_trace.txt 2>/dev/null || true
+
+    git add -A "$OVERLAY" data/snapshot_trace.txt
     if git diff --cached --quiet; then
         say "изменений нет — коммит не нужен"
         continue

@@ -19,13 +19,15 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import xml.etree.ElementTree as ET
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from .http_client import HttpClient
+from .http_client import HttpClient, RateLimiter
 
 log = logging.getLogger(__name__)
 
@@ -389,8 +391,37 @@ class WebsiteProvider:
 
     def __init__(self, http: HttpClient):
         """Сайтам школ нужен свой клиент: их тысячи, часть не отвечает вовсе,
-        и ждать каждый по минуте с пятью повторами, как ФНС, недопустимо."""
-        self.http = HttpClient(rate=4.0, timeout=8, retries=1)
+        и ждать каждый по минуте с пятью повторами, как ФНС, недопустимо.
+
+        Клиент при этом заводится на каждый хост отдельно. С одним на всех
+        403 от единственного сайта разгонял общий интервал до потолка в
+        20 секунд, и следом за ним вставали все остальные школы — сбор
+        падал с тридцати семи организаций в минуту до пятнадцати.
+        """
+        self._clients: "OrderedDict[str, HttpClient]" = OrderedDict()
+        self._clients_lock = threading.Lock()
+
+    # Сессий держим ограниченно: хостов тысячи, а нужны они по одному разу.
+    MAX_CLIENTS = 64
+
+    def _client(self, url: str) -> HttpClient:
+        host = urlparse(url).netloc.lower()
+        with self._clients_lock:
+            client = self._clients.get(host)
+            if client is None:
+                # Потолок ниже общего: школьный сайт — источник необязательный,
+                # ждать его дольше нескольких секунд смысла нет.
+                client = HttpClient(
+                    rate=0, timeout=8, retries=1,
+                    limiter=RateLimiter(0.25, max_interval=6.0),
+                )
+                self._clients[host] = client
+                while len(self._clients) > self.MAX_CLIENTS:
+                    _, old = self._clients.popitem(last=False)
+                    old.session.close()
+            else:
+                self._clients.move_to_end(host)
+            return client
 
     # Страницы школьных сайтов бывают на мегабайты; регулярным выражениям
     # столько не нужно, а время они съедают целиком.
@@ -408,7 +439,7 @@ class WebsiteProvider:
 
     def _page(self, url: str) -> Optional[str]:
         try:
-            resp = self.http.get(url, allow_redirects=True)
+            resp = self._client(url).get(url, allow_redirects=True)
         except RuntimeError:
             return None
         if resp.status_code != 200:

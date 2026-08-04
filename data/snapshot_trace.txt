@@ -1,9 +1,1 @@
-[08-04 02:10:59] === снимки контактов в git каждые 300 с ===
-To http://127.0.0.1:41729/git/cemispam-hash/per
-   b645360..82fed59  claude/russian-schools-parser-nc9nlq -> claude/russian-schools-parser-nc9nlq
-branch 'claude/russian-schools-parser-nc9nlq' set up to track 'origin/claude/russian-schools-parser-nc9nlq'.
-[08-04 02:16:01] снимок отправлен: контактов 16354 (488K)
-To http://127.0.0.1:41729/git/cemispam-hash/per
-   82fed59..9bfc71a  claude/russian-schools-parser-nc9nlq -> claude/russian-schools-parser-nc9nlq
-branch 'claude/russian-schools-parser-nc9nlq' set up to track 'origin/claude/russian-schools-parser-nc9nlq'.
-[08-04 02:21:02] снимок отправлен: контактов 16357 (488K)
+[08-04 03:11:02] === снимки контактов в git каждые 300 с ===

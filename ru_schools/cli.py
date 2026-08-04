@@ -70,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--workers", type=int, default=4)
     c.add_argument("--providers", nargs="*", default=None, help="busgov saby osm site")
 
+    o = sub.add_parser("osm", help="контакты из OpenStreetMap (бесплатно, одним пакетом)")
+    o.add_argument("--json", dest="osm_path", default="data/raw/osm_schools.json")
+
     e = sub.add_parser("export", help="выгрузка результата")
     e.add_argument("--csv", default="data/schools.csv")
     e.add_argument("--jsonl", default="data/schools.jsonl")
@@ -169,6 +172,9 @@ def main(argv=None) -> int:
     elif args.cmd == "contacts":
         n = pipeline.fetch_contacts(store, http, args.limit, args.workers, args.providers)
         print(f"обработано организаций: {n}")
+    elif args.cmd == "osm":
+        n = pipeline.fetch_osm_contacts(store, http, args.osm_path)
+        print(f"контакты из OpenStreetMap: {n}")
     elif args.cmd == "export":
         only = not args.all
         if args.csv:

@@ -11,6 +11,7 @@ from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Iterable, List, Optional
 
 from . import contacts as contacts_mod
+from . import osm_bulk
 from . import sshr
 from .egrul import SCHOOL_QUERIES, CaptchaRequired, EgrulClient, ServiceMaintenance
 from .http_client import HttpClient, RateLimiter
@@ -239,6 +240,31 @@ def fetch_staff(store: Store, http: HttpClient, zip_path: str) -> int:
             found.append((inn, count))
             period = period or per
     return store.add_staff(found, period, "ФНС, открытые данные (ССЧР)")
+
+
+def fetch_osm_contacts(store: Store, http: HttpClient, path: str) -> int:
+    """Контакты из OpenStreetMap: один пакет на всю страну.
+
+    Этап независим от платного поиска и полезен ровно тогда, когда тот
+    недоступен. Совпадений немного — в OSM полный адрес указан у полутора
+    тысяч школ, — но достаются они даром.
+    """
+    if not os.path.exists(path):
+        got = osm_bulk.download(http, path)
+        log.info("из OpenStreetMap выгружено объектов: %s", got)
+    osm = osm_bulk.index(path)
+    log.info("школ OSM с полным адресом: %s", len(osm))
+    done = 0
+    for row in store.pending_contacts():
+        tags = osm_bulk.match(row, osm)
+        if tags is None:
+            continue
+        c = osm_bulk.contact_of(tags)
+        if c is None:
+            continue
+        store.add_contacts(row["inn"], c.email, c.phones, c.website, c.source)
+        done += 1
+    return done
 
 
 def fetch_contacts(

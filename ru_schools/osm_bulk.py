@@ -49,12 +49,16 @@ _PLACE_KINDS = re.compile(
     r"|хутор|х|рп|мкр|го|м|р-н|мр-н)\b\.?"
 )
 _NON_WORD = re.compile(r"[^а-яёa-z0-9]+")
+# Инициалы в названии улицы: «УЛ. ИМЕНИ В. И. ЛЕНИНА» против «улица Ленина».
+# Без их отбрасывания такая улица не сходится сама с собой.
+_INITIALS = re.compile(r"\b[а-яёa-z]\.")
 # Дом в адресе ЕГРЮЛ идёт последним: «..., УЛ. СУВОРОВА, Д. 25».
 _HOUSE_TAIL = re.compile(r".*,\s*(?:д|стр|влд|зд)\.?\s*", re.I)
 
 
 def _norm_street(value: str) -> str:
-    return _NON_WORD.sub("", _STREET_KINDS.sub(" ", (value or "").lower()))
+    value = _INITIALS.sub(" ", (value or "").lower())
+    return _NON_WORD.sub("", _STREET_KINDS.sub(" ", value))
 
 
 def _norm_place(value: str) -> str:

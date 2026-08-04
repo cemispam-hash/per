@@ -221,7 +221,7 @@ class XmlRiverProvider:
         self.key = key
         self.site = site
 
-    def search_docs(self, query: str, attempts: int = 6):
+    def search_docs(self, query: str, attempts: int = 15):
         """(ссылки, текст сниппетов). Сниппеты нужны как запасной источник:
         телефон школы часто виден прямо в выдаче, а её сайт может быть
         недоступен."""
@@ -256,7 +256,7 @@ class XmlRiverProvider:
                 # две трети подряд. Занятые каналы освобождаются медленнее,
                 # тут ожидание должно расти.
                 busy = "канал" in low
-                time.sleep((5.0 * (attempt + 1)) if busy else 1.5)
+                time.sleep((5.0 * (attempt + 1)) if busy else 1.0)
                 continue
             log.warning("xmlriver: %s", text[:120])
             if transient:

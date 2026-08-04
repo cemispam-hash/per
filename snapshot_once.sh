@@ -26,6 +26,11 @@ def lit(v):
 
 with gzip.open(out, "wt", encoding="utf-8") as fh:
     fh.write("BEGIN TRANSACTION;\n")
+    # Наложение задаёт таблицу целиком, а не дополняет её: строки
+    # из базового снимка иначе воскресают после восстановления —
+    # вычищенные пустышки возвращались в базу и считались собранными.
+    fh.write("DELETE FROM contacts;\n")
+    fh.write("DELETE FROM failures WHERE stage='contacts';\n")
     rows = conn.execute(
         "SELECT inn,email,phones,website,source,fetched_at FROM contacts"
     )

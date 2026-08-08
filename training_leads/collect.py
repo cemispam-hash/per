@@ -48,6 +48,17 @@ SEARCH_QUERIES = (
 )
 
 
+# Запросы про руководство: ищем не учебный центр, а человека, который
+# в структуре завода отвечает за персонал и направляет людей на обучение.
+LEADERSHIP_QUERIES = (
+    "{name} заместитель генерального директора по персоналу",
+    "{name} начальник управления по работе с персоналом",
+    "{name} руководство структура управления персоналом",
+    "{name} телефонный справочник отдел подготовки кадров",
+    "{name} начальник отдела подготовки кадров ФИО",
+)
+
+
 class Collector:
     def __init__(self, max_pages: int = 14):
         user, key = xmlriver_credentials()
@@ -96,9 +107,10 @@ class Collector:
             out.append((url, "\n".join(p for p in parts if p)))
         return out
 
-    def from_search(self, name: str) -> List[Lead]:
+    def from_search(self, name: str, queries=None, parser=None) -> List[Lead]:
         found: List[Lead] = []
-        for tpl in SEARCH_QUERIES:
+        parser = parser or leads_from_text
+        for tpl in queries or SEARCH_QUERIES:
             q = tpl.format(name=name)
             for attempt in range(6):
                 try:
@@ -116,7 +128,7 @@ class Collector:
             for url, snippet in docs:
                 if not snippet or is_junk_source(url):
                     continue
-                found += leads_from_text(snippet, url, "выдача поиска")
+                found += parser(snippet, url, "выдача поиска")
         return found
 
 

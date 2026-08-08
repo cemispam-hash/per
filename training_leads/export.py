@@ -23,6 +23,7 @@ COLUMNS = [
     ("Ссылка на страницу", 52),
     ("Источник", 15),
     ("Достоверность", 30),
+    ("Проверка", 34),
     ("Фрагмент, где найдено", 60),
 ]
 
@@ -37,7 +38,7 @@ def rows(orgs: Dict[str, dict], leads: Dict[str, List[dict]]) -> List[list]:
             # честнее молчания — видно, что искали и не нашли.
             out.append([
                 name, inn, org.get("kpp", ""), org.get("region", ""),
-                org.get("site", ""), "", "", "", "", "", "", "не найдено", "", "",
+                org.get("site", ""), "", "", "", "", "", "", "не найдено", "", "", "",
             ])
             continue
         for lead in found:
@@ -47,7 +48,7 @@ def rows(orgs: Dict[str, dict], leads: Dict[str, List[dict]]) -> List[list]:
                 lead.get("role", ""), lead.get("person", ""),
                 lead.get("email", ""), ", ".join(lead.get("phones") or []),
                 lead.get("url", ""), lead.get("source", ""),
-                lead.get("grade", ""), lead.get("snippet", ""),
+                lead.get("grade", ""), lead.get("checked", ""), lead.get("snippet", ""),
             ])
     return out
 
@@ -73,6 +74,6 @@ def to_xlsx(orgs, leads, path: str) -> int:
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{len(data) + 1}"
     for r in range(2, len(data) + 2):
-        ws.cell(row=r, column=14).alignment = Alignment(wrap_text=False)
+        ws.cell(row=r, column=15).alignment = Alignment(wrap_text=False)
     wb.save(path)
     return len(data)

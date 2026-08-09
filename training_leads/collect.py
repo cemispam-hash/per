@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import xml.etree.ElementTree as ET
 from typing import Dict, List
@@ -132,7 +133,7 @@ class Collector:
         return found
 
 
-def grade(lead: Lead, sites: List[str], words: List[str]) -> str:
+def grade(lead: Lead, sites: List[str], words: List[str], inn: str = "") -> str:
     """Насколько записи можно верить.
 
     Одно и то же название «учебный центр» встречается и на сайте завода,
@@ -143,9 +144,18 @@ def grade(lead: Lead, sites: List[str], words: List[str]) -> str:
     host = urlparse(lead.url).netloc.lower().replace("www.", "")
     if any(host.endswith(d) for d in sites):
         return "сайт компании"
-    haystack = (lead.snippet + " " + lead.url).lower()
-    if any(w in haystack for w in words if len(w) >= 5):
-        return "сторонний сайт, компания упомянута"
+    haystack = lead.snippet + " " + lead.url
+    low = haystack.lower()
+    if inn and inn in haystack:
+        return "сторонний сайт, ИНН совпадает"
+    # Одного слова мало: «Сокол» на чужом сайте оказался фамилией человека,
+    # а не заводом. Название должно стоять рядом с формой собственности.
+    for w in words:
+        if len(w) < 5 or w not in low:
+            continue
+        window = low[max(0, low.find(w) - 60) : low.find(w) + len(w) + 20]
+        if re.search(r"(пао|оао|ао|зао|ооо|акционерн\w+|общество|корпорац|завод|предприят|компани)", window):
+            return "сторонний сайт, компания названа"
     return ""
 
 

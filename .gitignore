@@ -8,3 +8,4 @@ data/*.log
 data/COLLECT_DONE
 data/proxies.txt
 data/xmlriver.txt
+data/dadata.txt
